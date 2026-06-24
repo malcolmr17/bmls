@@ -18,7 +18,7 @@ const FORMATIONS=[
 ];
 
 const makeTeam=id=>({id,name:"",shortName:"",color:"#3B82F6",crest:null,players:[],formation:"2-2-1"});
-const makePlayer=()=>({id:Date.now()+Math.random(),name:"",position:"DEF",score:7,mdfAtkScore:7,mdfDefScore:7,injured:false,benched:false,wide:false,altPosition:null});
+const makePlayer=()=>({id:Date.now()+Math.random(),name:"",position:"DEF",score:7,mdfAtkScore:7,mdfDefScore:7,injured:false,suspended:false,wide:false,altPosition:null});
 const makeFixture=()=>({id:String(Date.now()+Math.random()),homeId:null,awayId:null,date:"",homeScore:null,awayScore:null,played:false,playerStats:[],matchWeek:null});
 
 function generateSeason(namedTeams){
@@ -56,18 +56,15 @@ async function loadState(){
     const data=await r.json();
     const all=data.fixtures||[];
     const meta=all.find(f=>f.id==='season_meta');
-    const social=all.find(f=>f.id==='social_data');
     return{
       teams:data.teams,
       fixtures:all.filter(f=>!f.type),
       transfers:all.filter(f=>f.type==='transfer'),
       activeMatchWeek:meta?.activeMatchWeek||1,
-      socialData:social||{id:'social_data',type:'meta',likes:{},comments:{}},
     };
   }catch{return null;}
 }
 async function syncMeta(amw){try{await fetch('/api/fixture/season_meta',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'season_meta',type:'meta',activeMatchWeek:amw})});}catch(e){console.error('sync meta:',e);}}
-async function syncSocialData(d){try{await fetch('/api/fixture/social_data',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});}catch(e){console.error('sync social:',e);}}
 function timeAgo(iso){const d=Date.now()-new Date(iso).getTime(),m=Math.floor(d/60000);if(m<1)return'now';if(m<60)return`${m}m`;const h=Math.floor(m/60);if(h<24)return`${h}h`;return`${Math.floor(h/24)}d`;}
 async function syncTeams(teams){try{await fetch('/api/teams',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(teams)});}catch(e){console.error('sync teams:',e);}}
 async function syncFixture(f){try{await fetch(`/api/fixture/${f.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(f)});}catch(e){console.error('sync fixture:',e);}}
@@ -96,7 +93,7 @@ function depthMultiplier(n){if(n<=1)return 0.9;if(n>=4)return 1.05;return 1.0;}
 
 function lineupRatings(team){
   if(!team)return{atk:0,def:0};
-  const active=team.players.filter(p=>!p.injured&&!p.benched);
+  const active=team.players.filter(p=>!p.injured&&!p.suspended);
   const fwds=active.filter(p=>p.position==="FWD");
   const defs=active.filter(p=>p.position==="DEF");
   const mdfs=active.filter(p=>p.position==="MDF");
@@ -139,7 +136,7 @@ function arrangeWide(arr){
 
 function predictedLineup(team,fixtures){
   const formation=FORMATIONS.find(f=>f.id===team.formation)||FORMATIONS[0];
-  const available=team.players.filter(p=>!p.injured&&!p.benched);
+  const available=team.players.filter(p=>!p.injured&&!p.suspended);
   const gk=available.find(p=>p.position==="GK");
   const baseRating=p=>p.position==="MDF"?(p.mdfAtkScore+p.mdfDefScore)/2:(p.score||5);
   const sp=p=>({...p,formScore:playerFormScore(p.id,fixtures)});
@@ -658,14 +655,14 @@ function SquadsTab({teams,setTeams}){
   const[selId,setSelId]=useState(null);
   const team=teams.find(t=>t.id===selId);
   const toggle=(pid,field)=>{
-    const nt=teams.map(t=>t.id!==selId?t:{...t,players:t.players.map(p=>p.id!==pid?p:{...p,[field]:!p[field],...(field==="benched"&&!p.benched?{injured:false}:{}),...(field==="injured"&&!p.injured?{benched:false}:{})})});
+    const nt=teams.map(t=>t.id!==selId?t:{...t,players:t.players.map(p=>p.id!==pid?p:{...p,[field]:!p[field],...(field==="suspended"&&!p.suspended?{injured:false}:{}),...(field==="injured"&&!p.injured?{suspended:false}:{})})});
     setTeams(nt);syncTeams(nt);
   };
   const setFormation=fid=>{const nt=teams.map(t=>t.id!==selId?t:{...t,formation:fid});setTeams(nt);syncTeams(nt);};
   if(named.length===0)return<Empty icon="📋" msg="No teams with players yet." hint="Go to Manage → Teams first."/>;
   const ratings=team?lineupRatings(team):null;
-  const activeOut=team?team.players.filter(p=>p.position!=="GK"&&!p.injured&&!p.benched):[];
-  const gk=team?team.players.find(p=>p.position==="GK"&&!p.injured&&!p.benched):null;
+  const activeOut=team?team.players.filter(p=>p.position!=="GK"&&!p.injured&&!p.suspended):[];
+  const gk=team?team.players.find(p=>p.position==="GK"&&!p.injured&&!p.suspended):null;
   const startingCount=(gk?1:0)+Math.min(activeOut.length,5);
   return(
     <div>
@@ -694,7 +691,7 @@ function SquadsTab({teams,setTeams}){
                 <span style={{width:6,height:6,borderRadius:"50%",background:posColor(pos),display:"inline-block"}}/>{posLabel}
               </div>
               {posPlayers.map(p=>{
-                const active=!p.injured&&!p.benched,isGK=p.position==="GK";
+                const active=!p.injured&&!p.suspended,isGK=p.position==="GK";
                 const widePrefix=p.wide&&(p.position==="DEF"||p.position==="FWD")?"Wide ":"";
                 const altLabel=p.position==="MDF"&&p.altPosition?` · Also ${p.altPosition}`:"";
                 const scoreLabel=isGK?"Not rated":p.position==="FWD"?`${widePrefix}ATK ${p.score}`:p.position==="DEF"?`${widePrefix}DEF ${p.score}`:`ATK ${p.mdfAtkScore} · DEF ${p.mdfDefScore}${altLabel}`;
@@ -706,8 +703,8 @@ function SquadsTab({teams,setTeams}){
                       <div style={{fontSize:11,color:C.muted,marginTop:2}}>{scoreLabel}</div>
                     </div>
                     <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>toggle(p.id,"benched")} style={{background:p.benched?`${C.gold}33`:"transparent",color:p.benched?C.gold:C.muted,border:`1px solid ${p.benched?C.gold:C.border}`,borderRadius:5,padding:"4px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Bench</button>
-                      <button onClick={()=>toggle(p.id,"injured")} style={{background:p.injured?`${C.red}33`:"transparent",color:p.injured?C.red:C.muted,border:`1px solid ${p.injured?C.red:C.border}`,borderRadius:5,padding:"4px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Injury</button>
+                      <button onClick={()=>toggle(p.id,"injured")} style={{background:p.injured?`${C.red}33`:"transparent",color:p.injured?C.red:C.muted,border:`1px solid ${p.injured?C.red:C.border}`,borderRadius:5,padding:"4px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Injured</button>
+                      <button onClick={()=>toggle(p.id,"suspended")} style={{background:p.suspended?`${C.gold}33`:"transparent",color:p.suspended?C.gold:C.muted,border:`1px solid ${p.suspended?C.gold:C.border}`,borderRadius:5,padding:"4px 9px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Susp.</button>
                     </div>
                   </div>
                 );
@@ -715,11 +712,11 @@ function SquadsTab({teams,setTeams}){
             </div>
           );
         })}
-        {team.players.some(p=>p.benched||p.injured)&&(
+        {team.players.some(p=>p.suspended||p.injured)&&(
           <div style={{marginTop:8,background:C.surface,borderRadius:8,padding:"10px 14px"}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Out</div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Unavailable</div>
             <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-              {team.players.filter(p=>p.benched||p.injured).map(p=><span key={p.id} style={{background:p.injured?`${C.red}22`:`${C.gold}22`,color:p.injured?C.red:C.gold,border:`1px solid ${p.injured?C.red:C.gold}44`,borderRadius:5,padding:"3px 9px",fontSize:11,fontWeight:600}}>{p.name||"Unnamed"} · {p.injured?"Injured":"Bench"}</span>)}
+              {team.players.filter(p=>p.suspended||p.injured).map(p=><span key={p.id} style={{background:p.injured?`${C.red}22`:`${C.gold}22`,color:p.injured?C.red:C.gold,border:`1px solid ${p.injured?C.red:C.gold}44`,borderRadius:5,padding:"3px 9px",fontSize:11,fontWeight:600}}>{p.name||"Unnamed"} · {p.injured?"Injured":"Suspended"}</span>)}
             </div>
           </div>
         )}
@@ -966,6 +963,13 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
                 <div><div style={{fontSize:10,color:C.green,marginBottom:4}}>Defense Score (1–10)</div><div style={{display:"flex",alignItems:"center",gap:10}}><input type="range" min="1" max="10" step="1" value={p.mdfDefScore} onChange={e=>updPlayer(editTeam,p.id,"mdfDefScore",+e.target.value)} style={{flex:1,accentColor:C.green}}/><div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.green,minWidth:28,textAlign:"center"}}>{p.mdfDefScore}</div></div></div>
               </div>}
               {p.position==="MDF"&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:10,color:C.muted,flex:1}}>Alt position</span><div style={{display:"flex",gap:6}}>{["DEF","FWD"].map(alt=>{const active=p.altPosition===alt;return<button key={alt} onClick={()=>updPlayer(editTeam,p.id,"altPosition",active?null:alt)} style={{background:active?`${C.accent}22`:"transparent",color:active?C.accent:C.muted,border:`1px solid ${active?C.accent:C.border}`,borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{alt}</button>;})}</div></div>}
+              <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:10,color:C.muted,flex:1}}>Status</span>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>updPlayer(editTeam,p.id,"injured",!p.injured)} style={{background:p.injured?`${C.red}33`:"transparent",color:p.injured?C.red:C.muted,border:`1px solid ${p.injured?C.red:C.border}`,borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Injured</button>
+                  <button onClick={()=>updPlayer(editTeam,p.id,"suspended",!p.suspended)} style={{background:p.suspended?`${C.gold}33`:"transparent",color:p.suspended?C.gold:C.muted,border:`1px solid ${p.suspended?C.gold:C.border}`,borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>Suspended</button>
+                </div>
+              </div>
             </div>
           ))}
           <div style={{display:"flex",gap:8,marginTop:4}}>
@@ -1349,14 +1353,26 @@ function generateArticles(teams,fixtures,transfers,activeMW){
     const seed=((starter.name.length*7)+(benched.name.length*3)+(team.name.length))%1000;
     const dp1=PUNDITS[seed%PUNDITS.length],dp2=PUNDITS[(seed+3)%PUNDITS.length];
     const posLabel=pos==='FWD'?'forward spot':pos==='DEF'?'defensive berth':'midfield role';
+    const proB=[
+      `I have been saying this all season and nobody wants to hear it. ${benched.name} is the better option in that ${posLabel} right now — it is not even a debate when you actually watch the games closely.`,
+      `Look, I like ${starter.name} as a footballer. Good player. But ${benched.name} is the one who can actually unlock something for ${team.name} right now. The manager has to be brave enough to make the call.`,
+      `If ${benched.name} was at a bigger club, this would not even be a conversation — they would walk into that side. The talent is right there. Somebody needs to start using it.`,
+      `Every week I watch ${team.name} and I keep thinking the same thing. That ${posLabel} has the wrong player in it. ${benched.name} changes games. ${starter.name} just fills a shirt.`,
+    ];
+    const proS=[
+      `Oh come on. ${starter.name} has been doing exactly what was asked of them week in, week out. You do not pull someone from that ${posLabel} just because there is competition knocking — that is how you destroy squad confidence.`,
+      `This narrative comes around every few weeks and it is always the same. Someone impresses in training and suddenly the manager is under pressure. ${starter.name} is there on merit. Full stop.`,
+      `I have a lot of respect for ${benched.name} — talented player, no question. But ${starter.name} has the trust of the dressing room and you simply cannot put a number on that. Change for the sake of it never ends well.`,
+      `${team.name} are getting results. Why would you change it? Football is not about who looks good in the warm-up. ${starter.name} delivers when it matters and that is what counts at the end of the season.`,
+    ];
     articles.push({
       tag:'Pundit Debate',color:'#f97316',
       headline:`${dp1} vs ${dp2}: Should ${team.name} start ${benched.name} ahead of ${starter.name}?`,
       body:`A genuine selection headache for the ${team.name} manager.`,
       date:`Match Week ${activeMW}`,priority:3,
       debate:{sides:[
-        {pundit:dp1,backs:benched.name,quote:`There is no debate here — ${benched.name} should be starting. The numbers might back ${starter.name} but football is not played on spreadsheets. ${benched.name} brings something different to that ${posLabel} and the team would be better for it.`},
-        {pundit:dp2,backs:starter.name,quote:`Absolute nonsense. ${starter.name} earns their place every single week. You do not drop players who are delivering results. ${benched.name} is a fine option off the bench but you cannot rip up what is clearly working for ${team.name}.`},
+        {pundit:dp1,backs:benched.name,quote:proB[seed%proB.length]},
+        {pundit:dp2,backs:starter.name,quote:proS[(seed+1)%proS.length]},
       ]},
     });
   });
@@ -1397,52 +1413,57 @@ function ManagePasswordModal({onSuccess,onCancel}){
   );
 }
 
-function NewsTab({teams,fixtures,transfers,activeMatchWeek,socialData,setSocialData}){
+function generateSocial(a){
+  const seed=a.headline.split('').reduce((s,c,i)=>s+(c.charCodeAt(0)*(i+1)),0);
+  const rng=n=>((seed*1013+n*1009)>>>0)%100;
+  const likes=6+rng(1)%55+rng(2)%35;
+  const FANS=['Dave','BigLeagueFan','FootyMad','TacticsGuy','MatchdayMike','TopBin99','TheTactician','LeagueWatcher','PressBoxPaul','TheGaffer','Linesman77','SilverStreet','Benchwatcher','Ultras99'];
+  const fan=n=>FANS[(seed+n*7)%FANS.length];
+  const POOLS={
+    'Transfer':['Wild one this, never saw it coming','Both clubs got something here I reckon','Big move — will be interesting to see how it pans out','Came out of nowhere that one','Risky move if you ask me','Good business for both sides'],
+    'Match Report':['Fully deserved that result','Could have been even more goals honestly','That performance was embarrassing tbh','Manager needs to explain that one','Gritty win but three points is three points','Did not see that coming at all'],
+    'Preview':["Can't wait for this one","Going to be a tight one","Home side has it easy here imo","No idea who wins this, genuine coin flip","One to watch for sure","Both teams will go for it"],
+    'Pundit Debate':["These two argue about everything lol","Second one has a point to be fair","Both completely wrong as usual","Classic pundit nonsense right here","This debate happens every single week","I actually agree with the first take here"],
+    'Form Guide':['You love to see it','That run is alarming, something has to change','Had a feeling they were coming good',"Won't last, they always drop off eventually"],
+    'Table Update':['Top of the league, get in!','Long way to go yet, anything can happen','Deserved every single point','Just wait till the big games come around'],
+    'Golden Boot':['Lethal. Pure quality this season','What a campaign they are having','Nobody is stopping that run','Dark horse for the award if you ask me'],
+    'Player Watch':['Best player in the league, no debate','Consistent as they come, week in week out','Cannot argue with those numbers at all','Absolute class, simple as'],
+    'Goalkeeper Watch':['Wall. An absolute wall.','GK of the season already and it is not close','Clean sheets win leagues, simple as that','Unbelievable this season, nothing gets past them'],
+    'Power Rankings':['These seem about right to me','Would argue with one or two of these','Top team by a mile honestly','Interesting to see how this looks after a few more weeks'],
+    'Betting':['Banker of the week for me that','Never back an odds-on favourite','Easy money if you believe the model','Risky at that price though'],
+    'Analysis':['Fair analysis this','Stats never lie in the end','Would disagree with parts but fair enough'],
+  };
+  const pool=POOLS[a.tag]||['Interesting one this','Good read','Fair enough','Thoughts on this?'];
+  const REPLIES=['Exactly this','Disagree completely','You might actually have a point','Bit harsh that','Fair play','Facts though','100% agree','Nah come on'];
+  const n=2+(rng(3)<50?1:0);
+  const comments=[];
+  for(let i=0;i<n;i++){
+    const minsAgo=rng(i*7+4)*20+8;
+    comments.push({
+      id:String(i),name:fan(i*3),
+      text:pool[(seed+i*13)%pool.length],
+      time:new Date(Date.now()-minsAgo*60000).toISOString(),
+      reply:rng(i*11+5)<45?{name:fan(i*5+2),text:REPLIES[rng(i*9+1)%REPLIES.length],time:new Date(Date.now()-(minsAgo-4)*60000).toISOString()}:null,
+    });
+  }
+  return{likes,comments};
+}
+
+function NewsTab({teams,fixtures,transfers,activeMatchWeek}){
   const articles=useMemo(()=>generateArticles(teams,fixtures,transfers,activeMatchWeek),[teams,fixtures,transfers,activeMatchWeek]);
+  const social=useMemo(()=>articles.map(generateSocial),[articles]);
   const[likedSet,setLikedSet]=useState(()=>new Set());
   const[expanded,setExpanded]=useState(()=>new Set());
-  const[commentInputs,setCommentInputs]=useState({});
-  const[replyInputs,setReplyInputs]=useState({});
-  const[replyingTo,setReplyingTo]=useState(null);
-  const[cname,setCname]=useState(()=>localStorage.getItem('bmls_cname')||'');
-  const aKey=a=>`${a.tag}__${a.headline.slice(0,48)}`;
   const tagBg=color=>color+'22';
-
-  const handleLike=key=>{
-    if(likedSet.has(key))return;
-    setLikedSet(prev=>{const s=new Set(prev);s.add(key);return s;});
-    const nd={...socialData,likes:{...socialData.likes,[key]:(socialData.likes[key]||0)+1}};
-    setSocialData(nd);syncSocialData(nd);
-  };
-
-  const postComment=(key,replyToId=null)=>{
-    const inp=replyToId?replyInputs[replyToId]:commentInputs[key];
-    const name=(inp?.name||cname||'Anonymous').trim();
-    const text=(inp?.text||'').trim();
-    if(!text)return;
-    if(name!==cname){setCname(name);localStorage.setItem('bmls_cname',name);}
-    const c={id:String(Date.now()+Math.random()),name,text,time:new Date().toISOString(),replyTo:replyToId||null};
-    const nd={...socialData,comments:{...socialData.comments,[key]:[...(socialData.comments[key]||[]),c]}};
-    setSocialData(nd);syncSocialData(nd);
-    if(replyToId){setReplyInputs(p=>({...p,[replyToId]:{name,text:''}}));setReplyingTo(null);}
-    else setCommentInputs(p=>({...p,[key]:{name,text:''}}));
-  };
-
-  const inputStyle={background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 10px",fontSize:11,color:C.text,outline:"none",fontFamily:"'DM Sans',sans-serif"};
-
   if(articles.length===0)return<Empty icon="📰" msg="No news yet." hint="Add teams, fixtures and results to generate articles."/>;
   return(
     <div>
       <SLabel>Latest News</SLabel>
       {articles.map((a,i)=>{
-        const key=aKey(a);
-        const likeCount=socialData.likes[key]||0;
-        const liked=likedSet.has(key);
-        const allCmts=socialData.comments[key]||[];
-        const topCmts=allCmts.filter(c=>!c.replyTo);
-        const getReplies=id=>allCmts.filter(c=>c.replyTo===id);
-        const isExpanded=expanded.has(key);
-        const cinp=commentInputs[key]||{name:cname,text:''};
+        const{likes,comments}=social[i];
+        const liked=likedSet.has(i);
+        const displayLikes=likes+(liked?1:0);
+        const isExpanded=expanded.has(i);
         return(
           <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,marginBottom:12,borderLeft:`3px solid ${a.color}`,overflow:"hidden"}}>
             <div style={{padding:"16px 16px 12px"}}>
@@ -1455,7 +1476,7 @@ function NewsTab({teams,fixtures,transfers,activeMatchWeek,socialData,setSocialD
                 <div style={{display:"flex",flexDirection:"column",gap:8}}>
                   {a.debate.sides.map((s,si)=>(
                     <div key={si} style={{background:C.surface,borderRadius:8,padding:"10px 12px",borderLeft:`2px solid ${si===0?'#f97316':'#6366f1'}`}}>
-                      <div style={{fontSize:10,fontWeight:700,color:si===0?'#f97316':'#6366f1',letterSpacing:.5,textTransform:"uppercase",marginBottom:4}}>{s.pundit} <span style={{color:C.muted,fontWeight:400,textTransform:"none"}}>backs {s.backs}</span></div>
+                      <div style={{fontSize:10,fontWeight:700,color:si===0?'#f97316':'#6366f1',letterSpacing:.5,textTransform:"uppercase",marginBottom:4}}>{s.pundit} <span style={{color:C.muted,fontWeight:400,textTransform:"none",fontSize:10}}>backs {s.backs}</span></div>
                       <div style={{fontSize:12,color:C.sub,lineHeight:1.6,fontStyle:"italic"}}>"{s.quote}"</div>
                     </div>
                   ))}
@@ -1465,72 +1486,45 @@ function NewsTab({teams,fixtures,transfers,activeMatchWeek,socialData,setSocialD
               )}
             </div>
             <div style={{padding:"8px 16px",borderTop:`1px solid ${C.border}22`,display:"flex",alignItems:"center",gap:14}}>
-              <button onClick={()=>handleLike(key)} style={{background:"none",border:"none",cursor:liked?"default":"pointer",display:"flex",alignItems:"center",gap:4,padding:0,color:liked?C.red:C.muted,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600}}>
-                <span style={{fontSize:14}}>{liked?'❤️':'🤍'}</span>{likeCount>0&&<span>{likeCount}</span>}
+              <button onClick={()=>setLikedSet(prev=>{const s=new Set(prev);s.has(i)?s.delete(i):s.add(i);return s;})} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,padding:0,color:liked?C.red:C.muted,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600}}>
+                <span style={{fontSize:14}}>{liked?'❤️':'🤍'}</span><span>{displayLikes}</span>
               </button>
-              <button onClick={()=>setExpanded(prev=>{const s=new Set(prev);s.has(key)?s.delete(key):s.add(key);return s;})} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,padding:0,color:C.muted,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600}}>
-                <span style={{fontSize:13}}>💬</span><span>{allCmts.length>0?`${allCmts.length} comment${allCmts.length!==1?'s':''}`:isExpanded?'Hide':'Comment'}</span>
+              <button onClick={()=>setExpanded(prev=>{const s=new Set(prev);s.has(i)?s.delete(i):s.add(i);return s;})} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,padding:0,color:C.muted,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600}}>
+                <span style={{fontSize:13}}>💬</span><span>{comments.length} comment{comments.length!==1?'s':''}</span>
               </button>
             </div>
             {isExpanded&&(
               <div style={{borderTop:`1px solid ${C.border}`,padding:"14px 16px",background:C.surface}}>
-                {topCmts.length===0&&<div style={{fontSize:11,color:C.muted,fontStyle:"italic",marginBottom:14}}>No comments yet — be the first!</div>}
-                {topCmts.map(c=>{
-                  const reps=getReplies(c.id);
-                  const isReplyHere=replyingTo?.key===key&&replyingTo?.id===c.id;
-                  const rinp=replyInputs[c.id]||{name:cname,text:''};
-                  return(
-                    <div key={c.id} style={{marginBottom:14}}>
-                      <div style={{display:"flex",gap:8}}>
-                        <div style={{width:28,height:28,borderRadius:"50%",background:C.accent+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                          <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{(c.name||'A')[0].toUpperCase()}</span>
+                {comments.map(c=>(
+                  <div key={c.id} style={{marginBottom:12}}>
+                    <div style={{display:"flex",gap:8}}>
+                      <div style={{width:28,height:28,borderRadius:"50%",background:C.accent+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <span style={{fontSize:11,fontWeight:700,color:C.accent}}>{c.name[0].toUpperCase()}</span>
+                      </div>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:3}}>
+                          <span style={{fontSize:12,fontWeight:700,color:C.text}}>{c.name}</span>
+                          <span style={{fontSize:10,color:C.muted}}>{timeAgo(c.time)}</span>
                         </div>
-                        <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"baseline",gap:6,marginBottom:3}}>
-                            <span style={{fontSize:12,fontWeight:700,color:C.text}}>{c.name}</span>
-                            <span style={{fontSize:10,color:C.muted}}>{timeAgo(c.time)}</span>
+                        <div style={{fontSize:12,color:C.sub,lineHeight:1.5}}>{c.text}</div>
+                      </div>
+                    </div>
+                    {c.reply&&(
+                      <div style={{marginLeft:36,marginTop:8,borderLeft:`1px solid ${C.border}`,paddingLeft:12,display:"flex",gap:8}}>
+                        <div style={{width:22,height:22,borderRadius:"50%",background:C.purple+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <span style={{fontSize:9,fontWeight:700,color:C.purple}}>{c.reply.name[0].toUpperCase()}</span>
+                        </div>
+                        <div>
+                          <div style={{display:"flex",alignItems:"baseline",gap:5,marginBottom:2}}>
+                            <span style={{fontSize:11,fontWeight:700,color:C.text}}>{c.reply.name}</span>
+                            <span style={{fontSize:9,color:C.muted}}>{timeAgo(c.reply.time)}</span>
                           </div>
-                          <div style={{fontSize:12,color:C.sub,lineHeight:1.5,marginBottom:4}}>{c.text}</div>
-                          <button onClick={()=>setReplyingTo(isReplyHere?null:{key,id:c.id})} style={{background:"none",border:"none",cursor:"pointer",color:C.muted,fontSize:10,fontWeight:600,padding:0,fontFamily:"'DM Sans',sans-serif"}}>Reply</button>
+                          <div style={{fontSize:11,color:C.sub,lineHeight:1.5}}>{c.reply.text}</div>
                         </div>
                       </div>
-                      {reps.length>0&&(
-                        <div style={{marginLeft:36,marginTop:8,borderLeft:`1px solid ${C.border}`,paddingLeft:12}}>
-                          {reps.map(r=>(
-                            <div key={r.id} style={{display:"flex",gap:8,marginBottom:8}}>
-                              <div style={{width:22,height:22,borderRadius:"50%",background:C.purple+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                                <span style={{fontSize:9,fontWeight:700,color:C.purple}}>{(r.name||'A')[0].toUpperCase()}</span>
-                              </div>
-                              <div>
-                                <div style={{display:"flex",alignItems:"baseline",gap:5,marginBottom:2}}>
-                                  <span style={{fontSize:11,fontWeight:700,color:C.text}}>{r.name}</span>
-                                  <span style={{fontSize:9,color:C.muted}}>{timeAgo(r.time)}</span>
-                                </div>
-                                <div style={{fontSize:11,color:C.sub,lineHeight:1.5}}>{r.text}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {isReplyHere&&(
-                        <div style={{marginLeft:36,marginTop:8,display:"flex",flexDirection:"column",gap:5}}>
-                          <input value={rinp.name} onChange={e=>setReplyInputs(p=>({...p,[c.id]:{...rinp,name:e.target.value}}))} placeholder="Your name" style={{...inputStyle,width:"100%"}}/>
-                          <div style={{display:"flex",gap:6}}>
-                            <input value={rinp.text} onChange={e=>setReplyInputs(p=>({...p,[c.id]:{...rinp,text:e.target.value}}))} onKeyDown={e=>e.key==='Enter'&&postComment(key,c.id)} placeholder="Write a reply..." style={{...inputStyle,flex:1}}/>
-                            <button onClick={()=>postComment(key,c.id)} style={{background:C.accent,border:"none",borderRadius:6,padding:"6px 12px",fontSize:11,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>Post</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                <div style={{borderTop:topCmts.length>0?`1px solid ${C.border}`:"none",paddingTop:topCmts.length>0?12:0,display:"flex",flexDirection:"column",gap:5}}>
-                  <input value={cinp.name} onChange={e=>setCommentInputs(p=>({...p,[key]:{...cinp,name:e.target.value}}))} placeholder="Your name" style={{...inputStyle,width:"100%"}}/>
-                  <div style={{display:"flex",gap:6}}>
-                    <input value={cinp.text} onChange={e=>setCommentInputs(p=>({...p,[key]:{...cinp,text:e.target.value}}))} onKeyDown={e=>e.key==='Enter'&&postComment(key)} placeholder="Add a comment..." style={{...inputStyle,flex:1}}/>
-                    <button onClick={()=>postComment(key)} style={{background:C.accent,border:"none",borderRadius:6,padding:"6px 12px",fontSize:11,fontWeight:700,color:"#fff",cursor:"pointer",fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>Post</button>
+                    )}
                   </div>
-                </div>
+                ))}
               </div>
             )}
           </div>
@@ -1562,15 +1556,12 @@ function App(){
   const[transfers,setTransfers]=useState([]);
   const[activeMatchWeek,setActiveMatchWeek]=useState(1);
   const[profilePlayer,setProfilePlayer]=useState(null);
-  const[socialData,setSocialData]=useState({id:'social_data',type:'meta',likes:{},comments:{}});
-
   useEffect(()=>{
     loadState().then(data=>{
       setTeams(data?.teams?.length?data.teams:Array.from({length:12},(_,i)=>makeTeam(i+1)));
       setFixtures(data?.fixtures||[]);
       setTransfers(data?.transfers||[]);
       setActiveMatchWeek(data?.activeMatchWeek||1);
-      setSocialData(data?.socialData||{id:'social_data',type:'meta',likes:{},comments:{}});
       setLoaded(true);
     });
   },[]);
@@ -1640,7 +1631,7 @@ function App(){
         {tab==="ratings" &&<RatingsTab teams={teams}/>}
         {tab==="squads"    &&<SquadsTab teams={teams} setTeams={setTeams}/>}
         {tab==="transfers" &&<TransfersTab transfers={transfers} teams={teams}/>}
-        {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek} socialData={socialData} setSocialData={setSocialData}/>}
+        {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek}/>}
         {tab==="odds"      &&<OddsTab teams={teams} fixtures={fixtures} activeMatchWeek={activeMatchWeek}/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} activeMatchWeek={activeMatchWeek} setActiveMatchWeek={setActiveMatchWeek} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
