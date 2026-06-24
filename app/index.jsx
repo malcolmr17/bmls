@@ -643,9 +643,7 @@ function SquadsTab({teams,setTeams}){
       {team&&<div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Formation</div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {FORMATIONS.map(f=><button key={f.id} onClick={()=>setFormation(f.id)} style={{background:(team.formation||"2-2-1")===f.id?C.accent:C.card,color:(team.formation||"2-2-1")===f.id?C.white:C.sub,border:`1px solid ${(team.formation||"2-2-1")===f.id?C.accent:C.border}`,borderRadius:6,padding:"6px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{f.label}</button>)}
-          </div>
+          <div style={{display:"inline-block",background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 16px",fontSize:13,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif"}}>{team.formation||"2-2-1"}</div>
         </div>
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",marginBottom:18,display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,textAlign:"center"}}>
           <div><div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>Available</div><div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:startingCount===6?C.green:C.gold}}>{startingCount}<span style={{fontSize:14,color:C.muted}}>/6</span></div></div>
