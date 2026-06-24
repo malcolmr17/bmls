@@ -323,10 +323,10 @@ const Sel=({value,onChange,options})=>(
     {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
   </select>
 );
-const Btn=({children,onClick,variant="primary",small})=>{
+const Btn=({children,onClick,variant="primary",small,style:xStyle})=>{
   const bg=variant==="primary"?C.accent:variant==="danger"?"#7f1d1d":variant==="success"?"#14532d":variant==="export"?"#1e3a5f":C.border;
   const col=variant==="danger"?"#fca5a5":variant==="success"?"#86efac":variant==="export"?"#93c5fd":C.white;
-  return <button onClick={onClick} style={{background:bg,color:col,border:"none",borderRadius:6,cursor:"pointer",padding:small?"5px 10px":"8px 16px",fontSize:small?12:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif"}}>{children}</button>;
+  return <button onClick={onClick} style={{background:bg,color:col,border:"none",borderRadius:6,cursor:"pointer",padding:small?"5px 10px":"8px 16px",fontSize:small?12:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",...xStyle}}>{children}</button>;
 };
 const SLabel=({children})=><div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginBottom:10}}>{children}</div>;
 const TeamBadge=({color,crest,size=28})=>crest
@@ -1668,6 +1668,171 @@ function NewsTab({teams,fixtures,transfers,activeMatchWeek}){
   );
 }
 
+const KIT_COLORS=['#3B82F6','#EF4444','#22C55E','#F59E0B','#A855F7','#EC4899','#06B6D4','#F97316','#E2E8F0','#6B7280'];
+
+function CreateTab(){
+  const freshDraft=()=>({id:String(Date.now()+Math.random()),name:'',color:'#3B82F6',formation:'2-2-1',players:[]});
+  const[myTeams,setMyTeams]=useState(()=>{try{return JSON.parse(localStorage.getItem('bmls_my_teams')||'[]');}catch{return[];}});
+  const[draft,setDraft]=useState(freshDraft);
+  const[editSlot,setEditSlot]=useState(null);
+  const[saved,setSaved]=useState(false);
+
+  const form=FORMATIONS.find(f=>f.id===draft.formation)||FORMATIONS[0];
+  const totalSlots=1+form.def+form.mdf+form.fwd;
+  const rows=[{pos:'FWD',n:form.fwd},{pos:'MDF',n:form.mdf},{pos:'DEF',n:form.def},{pos:'GK',n:1}].filter(r=>r.n>0);
+
+  const getPlayer=(pos,i)=>draft.players.find(p=>p.pos===pos&&p.i===i);
+  const setSlot=(pos,i,name)=>{
+    const others=draft.players.filter(p=>!(p.pos===pos&&p.i===i));
+    setDraft(d=>({...d,players:name.trim()?[...others,{pos,i,name:name.trim()}]:others}));
+  };
+
+  const saveTeam=()=>{
+    if(!draft.name.trim())return;
+    const idx=myTeams.findIndex(t=>t.id===draft.id);
+    const updated=idx>=0?myTeams.map((t,j)=>j===idx?draft:t):[...myTeams,draft];
+    setMyTeams(updated);
+    localStorage.setItem('bmls_my_teams',JSON.stringify(updated));
+    setSaved(true);setTimeout(()=>setSaved(false),2000);
+  };
+  const loadTeam=t=>{setDraft({...t});setEditSlot(null);};
+  const deleteTeam=id=>{
+    const updated=myTeams.filter(t=>t.id!==id);
+    setMyTeams(updated);localStorage.setItem('bmls_my_teams',JSON.stringify(updated));
+    if(draft.id===id)setDraft(freshDraft());
+  };
+
+  const slotGap=n=>n===1?0:n===2?60:n===3?28:18;
+
+  return(
+    <div style={{padding:16,paddingBottom:40}}>
+      <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:14}}>Build Your Team</div>
+
+      {/* Name + Color */}
+      <div style={{background:C.card,borderRadius:10,padding:14,marginBottom:10,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:6}}>Team Name</div>
+        <Inp value={draft.name} onChange={v=>setDraft(d=>({...d,name:v}))} placeholder="e.g. FC Thunderbolts"/>
+        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginTop:12,marginBottom:8}}>Kit Color</div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {KIT_COLORS.map(c=>(
+            <div key={c} onClick={()=>setDraft(d=>({...d,color:c}))} style={{
+              width:30,height:30,borderRadius:'50%',background:c,cursor:'pointer',
+              border:`2.5px solid ${draft.color===c?'#fff':'transparent'}`,
+              boxShadow:draft.color===c?`0 0 0 2.5px ${c}`:c==='#E2E8F0'?'0 0 0 1px #4B5563':'none',
+              transition:'transform 0.1s',transform:draft.color===c?'scale(1.18)':'scale(1)',
+            }}/>
+          ))}
+        </div>
+      </div>
+
+      {/* Formation */}
+      <div style={{background:C.card,borderRadius:10,padding:14,marginBottom:10,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Formation</div>
+        <div style={{display:'flex',gap:6}}>
+          {FORMATIONS.map(f=>{
+            const on=draft.formation===f.id;
+            return(
+              <button key={f.id} onClick={()=>{setDraft(d=>({...d,formation:f.id,players:[]}));setEditSlot(null);}} style={{
+                flex:1,padding:'10px 4px',borderRadius:8,cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",
+                fontSize:18,letterSpacing:1,
+                background:on?`${C.accent}22`:'transparent',color:on?C.accent:C.muted,
+                border:`1px solid ${on?C.accent:C.border}`,
+              }}>{f.label}</button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Pitch builder */}
+      <div style={{background:'#1b6530',borderRadius:editSlot?'10px 10px 0 0':10,overflow:'hidden',marginBottom:editSlot?0:10}}>
+        <div style={{padding:'18px 8px 10px',position:'relative'}}>
+          <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:72,height:72,borderRadius:'50%',border:'1px solid rgba(255,255,255,0.13)',pointerEvents:'none'}}/>
+          <div style={{position:'absolute',top:'50%',left:0,right:0,height:1,background:'rgba(255,255,255,0.1)',pointerEvents:'none'}}/>
+          <div style={{display:'flex',flexDirection:'column',gap:22,position:'relative'}}>
+            {rows.map(({pos,n})=>(
+              <div key={pos} style={{display:'flex',justifyContent:'center',gap:slotGap(n),alignItems:'center'}}>
+                {Array.from({length:n},(_,i)=>{
+                  const pl=getPlayer(pos,i);
+                  const active=editSlot?.pos===pos&&editSlot?.i===i;
+                  return(
+                    <div key={i} onClick={()=>setEditSlot(active?null:{pos,i,name:pl?.name||''})} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,cursor:'pointer'}}>
+                      <div style={{
+                        width:42,height:42,borderRadius:'50%',
+                        background:active?draft.color:pl?draft.color:draft.color+'55',
+                        border:`2.5px solid ${active?'#fff':pl?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.3)'}`,
+                        boxShadow:active?'0 0 0 3px rgba(255,255,255,0.35),0 2px 8px rgba(0,0,0,0.5)':'0 2px 6px rgba(0,0,0,0.4)',
+                        display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s',
+                      }}>
+                        <span style={{fontSize:8,fontWeight:900,color:active||pl?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.45)',letterSpacing:.5}}>{pos}</span>
+                      </div>
+                      <span style={{fontSize:9,color:pl?'#fff':'rgba(255,255,255,0.45)',fontWeight:700,textAlign:'center',lineHeight:1.2,textShadow:'0 1px 3px rgba(0,0,0,0.9)',maxWidth:54,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                        {pl?.name?.trim().split(/\s+/).pop()||'+'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div style={{textAlign:'center',fontSize:9,color:'rgba(255,255,255,0.28)',marginTop:12,letterSpacing:1}}>{draft.players.length}/{totalSlots} players added</div>
+        </div>
+      </div>
+
+      {/* Slot editor */}
+      {editSlot&&(
+        <div style={{background:C.card,border:`1px solid ${C.accent}`,borderTop:'none',borderRadius:'0 0 10px 10px',padding:12,marginBottom:10}}>
+          <div style={{fontSize:10,color:C.accent,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>{editSlot.pos} — Player Name</div>
+          <div style={{display:'flex',gap:8}}>
+            <input
+              autoFocus
+              value={editSlot.name}
+              onChange={e=>setEditSlot(s=>({...s,name:e.target.value}))}
+              onKeyDown={e=>{if(e.key==='Enter'){setSlot(editSlot.pos,editSlot.i,editSlot.name);setEditSlot(null);}}}
+              placeholder={`Enter ${editSlot.pos} player name`}
+              style={{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,color:C.text,padding:'7px 10px',fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none'}}
+            />
+            <Btn onClick={()=>{setSlot(editSlot.pos,editSlot.i,editSlot.name);setEditSlot(null);}}>Done</Btn>
+          </div>
+          {getPlayer(editSlot.pos,editSlot.i)&&(
+            <button onClick={()=>{setSlot(editSlot.pos,editSlot.i,'');setEditSlot(null);}} style={{marginTop:8,background:'none',border:'none',color:C.red,fontSize:11,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",padding:0}}>Remove player</button>
+          )}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{display:'flex',gap:8,marginBottom:20}}>
+        <Btn onClick={saveTeam} variant={saved?'success':'primary'} style={{flex:1}}>{saved?'✓ Saved':'Save Team'}</Btn>
+        <Btn onClick={()=>{setDraft(freshDraft());setEditSlot(null);}} variant="secondary">New</Btn>
+      </div>
+
+      {/* Saved teams */}
+      {myTeams.length>0&&(
+        <>
+          <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:10}}>My Teams</div>
+          {myTeams.map(t=>{
+            const tf=FORMATIONS.find(f=>f.id===t.formation)||FORMATIONS[0];
+            const total=1+tf.def+tf.mdf+tf.fwd;
+            const isCurrent=draft.id===t.id;
+            return(
+              <div key={t.id} style={{background:isCurrent?`${C.accent}11`:C.card,border:`1px solid ${isCurrent?C.accent:C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:30,height:30,borderRadius:'50%',background:t.color,flexShrink:0,border:'2px solid rgba(255,255,255,0.2)'}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.name||'Unnamed'}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{t.formation} · {t.players.length}/{total} players</div>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <Btn onClick={()=>loadTeam(t)} variant="secondary" small>Edit</Btn>
+                  <Btn onClick={()=>deleteTeam(t.id)} variant="danger" small>×</Btn>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
 const TABS=[
   {id:"fixtures",  label:"Fixtures"},
   {id:"table",     label:"Table"},
@@ -1677,6 +1842,7 @@ const TABS=[
   {id:"transfers", label:"Transfers"},
   {id:"news",      label:"News"},
   {id:"odds",      label:"Odds"},
+  {id:"create",    label:"Create"},
   {id:"manage",    label:"⚙ Manage"},
 ];
 
@@ -1776,6 +1942,7 @@ function App(){
         {tab==="transfers" &&<TransfersTab transfers={transfers} teams={teams}/>}
         {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek}/>}
         {tab==="odds"      &&<OddsTab teams={teams} fixtures={fixtures} activeMatchWeek={activeMatchWeek}/>}
+        {tab==="create"    &&<CreateTab/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} activeMatchWeek={activeMatchWeek} setActiveMatchWeek={setActiveMatchWeek} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
     </div>
