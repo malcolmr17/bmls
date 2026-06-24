@@ -140,10 +140,18 @@ function predictedLineup(team,fixtures){
   const altPool=available.filter(p=>p.position==="MDF"&&p.altPosition&&!used.has(p.id)).map(sp).sort(cmp);
   const altUsed=new Set();
   const defs=[...primaryDefs];
+  const mdfs=[...primaryMdfs];
   const fwds=[...primaryFwds];
   altPool.filter(p=>p.altPosition==="DEF"&&!altUsed.has(p.id)).slice(0,formation.def-defs.length).forEach(p=>{defs.push({...p,position:"DEF",wide:true,_origPos:"MDF"});altUsed.add(p.id);});
   altPool.filter(p=>p.altPosition==="FWD"&&!altUsed.has(p.id)).slice(0,formation.fwd-fwds.length).forEach(p=>{fwds.push({...p,position:"FWD",wide:true,_origPos:"MDF"});altUsed.add(p.id);});
-  return{gk:gk||null,defs:arrangeWide(defs),mdfs:primaryMdfs,fwds:arrangeWide(fwds),formation};
+  // fill any remaining gaps with best unused outfield players
+  const assigned=new Set([...(gk?[gk.id]:[]),...defs.map(p=>p.id),...mdfs.map(p=>p.id),...fwds.map(p=>p.id)]);
+  const spares=available.filter(p=>p.position!=="GK"&&!assigned.has(p.id)).map(sp).sort(cmp);
+  let si=0;
+  while(defs.length<formation.def&&si<spares.length){defs.push({...spares[si],position:"DEF"});si++;}
+  while(mdfs.length<formation.mdf&&si<spares.length){mdfs.push({...spares[si],position:"MDF"});si++;}
+  while(fwds.length<formation.fwd&&si<spares.length){fwds.push({...spares[si],position:"FWD"});si++;}
+  return{gk:gk||null,defs:arrangeWide(defs),mdfs,fwds:arrangeWide(fwds),formation};
 }
 
 function predictMatch(home,away){
@@ -336,11 +344,18 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
       <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:54,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
     </div>
   );
-  const PlayerRow=({players,color,team})=>(
-    <div style={{display:"flex",justifyContent:"center",gap:players.length===2?36:6,padding:"0 4px",flexWrap:"wrap"}}>
-      {players.map(p=><Dot key={p.id} p={p} color={color} team={team}/>)}
-    </div>
-  );
+  const PlayerRow=({players,color,team,staggerCenter=false})=>{
+    const doStagger=staggerCenter&&players.length===3;
+    return(
+      <div style={{display:"flex",justifyContent:"center",gap:players.length===2?36:6,padding:"0 4px",flexWrap:"wrap",alignItems:doStagger?"flex-end":"center"}}>
+        {players.map((p,i)=>(
+          <div key={p.id} style={{transform:doStagger&&i===1?"translateY(-14px)":"none"}}>
+            <Dot p={p} color={color} team={team}/>
+          </div>
+        ))}
+      </div>
+    );
+  };
   return(
     <div style={{position:"relative",borderRadius:10,overflow:"hidden",background:"#1b6530"}}>
       <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(180deg,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 36px,rgba(0,0,0,0.07) 36px,rgba(0,0,0,0.07) 72px)",pointerEvents:"none"}}/>
@@ -362,11 +377,11 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
         {hl.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:28}}><Dot p={hl.gk} color={home.color} team={home}/></div>}
         {hl.defs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.defs} color={home.color} team={home}/></div>}
         {hl.mdfs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.mdfs} color={home.color} team={home}/></div>}
-        {hl.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.fwds} color={home.color} team={home}/></div>}
+        {hl.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.fwds} color={home.color} team={home} staggerCenter={hl.fwds.length===3}/></div>}
         <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0"}}>
           <div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/><span style={{fontSize:8,color:"rgba(255,255,255,0.4)",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>kick off</span><div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/>
         </div>
-        {al.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.fwds} color={away.color} team={away}/></div>}
+        {al.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.fwds} color={away.color} team={away} staggerCenter={al.fwds.length===3}/></div>}
         {al.mdfs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.mdfs} color={away.color} team={away}/></div>}
         {al.defs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.defs} color={away.color} team={away}/></div>}
         {al.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}><Dot p={al.gk} color={away.color} team={away}/></div>}
