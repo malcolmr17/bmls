@@ -1286,7 +1286,7 @@ function generateArticles(teams,fixtures,transfers,activeMW){
     }
     // odds spotlight
     let bigMatch=null,bigProb=0;
-    fixtures.filter(f=>!f.played&&f.homeId&&f.awayId).forEach(f=>{
+    fixtures.filter(f=>!f.played&&f.homeId&&f.awayId&&f.matchWeek===activeMW).forEach(f=>{
       const h=named.find(t=>t.id===f.homeId),a=named.find(t=>t.id===f.awayId);
       if(!h||!a)return;
       const o=calcOdds(h,a);
