@@ -115,8 +115,8 @@ function predictedLineup(team,fixtures){
   const altUsed=new Set();
   const defs=[...primaryDefs];
   const fwds=[...primaryFwds];
-  altPool.filter(p=>p.altPosition==="DEF"&&!altUsed.has(p.id)).slice(0,formation.def-defs.length).forEach(p=>{defs.push({...p,position:"DEF",wide:true});altUsed.add(p.id);});
-  altPool.filter(p=>p.altPosition==="FWD"&&!altUsed.has(p.id)).slice(0,formation.fwd-fwds.length).forEach(p=>{fwds.push({...p,position:"FWD",wide:true});altUsed.add(p.id);});
+  altPool.filter(p=>p.altPosition==="DEF"&&!altUsed.has(p.id)).slice(0,formation.def-defs.length).forEach(p=>{defs.push({...p,position:"DEF",wide:true,_origPos:"MDF"});altUsed.add(p.id);});
+  altPool.filter(p=>p.altPosition==="FWD"&&!altUsed.has(p.id)).slice(0,formation.fwd-fwds.length).forEach(p=>{fwds.push({...p,position:"FWD",wide:true,_origPos:"MDF"});altUsed.add(p.id);});
   return{gk:gk||null,defs:arrangeWide(defs),mdfs:primaryMdfs,fwds:arrangeWide(fwds),formation};
 }
 
@@ -229,25 +229,90 @@ function PredLineup({team,fixtures,side="left"}){
   );
 }
 
-function FieldLineup({home,away,fixtures}){
+function PlayerProfileModal({data,fixtures,onClose}){
+  const{player,team}=data;
+  const orig=player._origPos||player.position;
+  const pc=posColor(orig);
+  const stats=useMemo(()=>{
+    const s={goals:0,penGoals:0,assists:0,yellowCards:0,redCard:false,cleanSheets:0,apps:0,ratings:[]};
+    fixtures.filter(f=>f.played).forEach(f=>{
+      const ps=(f.playerStats||[]).find(x=>x.playerId===player.id);
+      if(!ps)return;
+      s.apps++;s.goals+=ps.goals||0;s.penGoals+=ps.penGoals||0;s.assists+=ps.assists||0;
+      s.yellowCards+=ps.yellowCards||0;if(ps.redCard)s.redCard=true;
+      if(ps.cleanSheet)s.cleanSheets++;if(ps.rating)s.ratings.push(ps.rating);
+    });
+    s.avgRating=s.ratings.length>0?(s.ratings.reduce((a,b)=>a+b,0)/s.ratings.length).toFixed(1):null;
+    return s;
+  },[player.id,fixtures]);
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:16,width:"100%",maxWidth:380,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+        <div style={{background:`linear-gradient(135deg,${team.color}44,${team.color}11)`,borderBottom:`1px solid ${C.border}`,padding:"20px 20px 18px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,letterSpacing:1,color:C.white,lineHeight:1}}>{player.name||"Unknown"}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                <div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:8,height:8,borderRadius:2,background:team.color}}/><span style={{fontSize:12,color:C.sub,fontWeight:600}}>{team.name}</span></div>
+                <span style={{background:pc+"33",color:pc,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700}}>{orig}</span>
+                {(player.wide&&(orig==="DEF"||orig==="FWD"))&&<span style={{background:`${C.accent}22`,color:C.accent,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700}}>Wide</span>}
+                {orig==="MDF"&&player.altPosition&&<span style={{background:`${C.muted}22`,color:C.muted,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:700}}>Also {player.altPosition}</span>}
+              </div>
+            </div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:18,padding:4,lineHeight:1,flexShrink:0}}>✕</button>
+          </div>
+        </div>
+        {orig!=="GK"&&(
+          <div style={{padding:"16px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:10}}>
+            {(orig==="FWD"||orig==="MDF")&&<div style={{flex:1,background:C.surface,borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:9,color:C.red,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Attack</div><div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:C.red}}>{orig==="FWD"?player.score:player.mdfAtkScore}</div></div>}
+            {(orig==="DEF"||orig==="MDF")&&<div style={{flex:1,background:C.surface,borderRadius:8,padding:"10px 12px",textAlign:"center"}}><div style={{fontSize:9,color:C.green,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Defense</div><div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:C.green}}>{orig==="DEF"?player.score:player.mdfDefScore}</div></div>}
+          </div>
+        )}
+        <div style={{padding:"16px 20px"}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginBottom:12}}>This Season</div>
+          {stats.apps===0
+            ?<div style={{fontSize:12,color:C.muted,fontStyle:"italic"}}>No appearances yet.</div>
+            :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+              {[
+                {label:"Apps",val:stats.apps,color:C.sub},
+                {label:"Goals",val:stats.goals,color:C.gold},
+                {label:"Assists",val:stats.assists,color:C.green},
+                ...(orig==="GK"?[{label:"Clean Sheets",val:stats.cleanSheets,color:C.accent}]:[]),
+                {label:"Yellows",val:stats.yellowCards,color:C.gold},
+                {label:"Avg Rating",val:stats.avgRating||"—",color:C.purple},
+              ].map(({label,val,color})=>(
+                <div key={label} style={{background:C.surface,borderRadius:8,padding:"10px 8px",textAlign:"center"}}>
+                  <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>{label}</div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color}}>{val}</div>
+                </div>
+              ))}
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FieldLineup({home,away,fixtures,onPlayerClick}){
   if(!home||!away)return null;
   const hl=predictedLineup(home,fixtures);
   const al=predictedLineup(away,fixtures);
   const homeRows=[hl.defs,hl.mdfs,hl.fwds].filter(r=>r.length>0);
   const awayRows=[al.fwds,al.mdfs,al.defs].filter(r=>r.length>0);
-  const Dot=({p,color})=>(
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,width:54}}>
+  const Dot=({p,color,team})=>(
+    <div onClick={()=>onPlayerClick&&onPlayerClick({player:p,team})} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,width:54,cursor:onPlayerClick?"pointer":"default"}}>
       <div style={{width:34,height:34,borderRadius:"50%",background:color,border:"2.5px solid rgba(255,255,255,0.9)",boxShadow:"0 2px 8px rgba(0,0,0,0.5)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
         <span style={{fontSize:7,fontWeight:900,color:"rgba(255,255,255,0.95)",letterSpacing:.5,textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.position==="GK"?"GK":p.position}</span>
       </div>
       <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:54,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
     </div>
   );
-  const PlayerRow=({players,color,wingbacks=false})=>{
+  const PlayerRow=({players,color,team,wingbacks=false})=>{
     const spread=wingbacks&&players.length===3;
     return(
       <div style={{display:"flex",justifyContent:spread?"space-between":"center",gap:spread?0:players.length===2?36:6,padding:spread?"0 6px":"0 4px",flexWrap:"wrap"}}>
-        {players.map(p=><Dot key={p.id} p={p} color={color}/>)}
+        {players.map(p=><Dot key={p.id} p={p} color={color} team={team}/>)}
       </div>
     );
   };
@@ -269,17 +334,17 @@ function FieldLineup({home,away,fixtures}){
           <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:home.color,flexShrink:0}}/><span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)",letterSpacing:.5}}>{home.name}</span></div>
           <span style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontWeight:600,letterSpacing:1}}>{hl.formation.label}</span>
         </div>
-        {hl.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:28}}><Dot p={hl.gk} color={home.color}/></div>}
-        {hl.defs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.defs} color={home.color} wingbacks={hl.defs.length===3}/></div>}
-        {hl.mdfs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.mdfs} color={home.color}/></div>}
-        {hl.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.fwds} color={home.color}/></div>}
+        {hl.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:28}}><Dot p={hl.gk} color={home.color} team={home}/></div>}
+        {hl.defs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.defs} color={home.color} team={home} wingbacks={hl.defs.length===3}/></div>}
+        {hl.mdfs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.mdfs} color={home.color} team={home}/></div>}
+        {hl.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={hl.fwds} color={home.color} team={home}/></div>}
         <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0"}}>
           <div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/><span style={{fontSize:8,color:"rgba(255,255,255,0.4)",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>kick off</span><div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/>
         </div>
-        {al.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.fwds} color={away.color}/></div>}
-        {al.mdfs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.mdfs} color={away.color}/></div>}
-        {al.defs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.defs} color={away.color} wingbacks={al.defs.length===3}/></div>}
-        {al.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}><Dot p={al.gk} color={away.color}/></div>}
+        {al.fwds.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.fwds} color={away.color} team={away}/></div>}
+        {al.mdfs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.mdfs} color={away.color} team={away}/></div>}
+        {al.defs.length>0&&<div style={{marginBottom:28}}><PlayerRow players={al.defs} color={away.color} team={away} wingbacks={al.defs.length===3}/></div>}
+        {al.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}><Dot p={al.gk} color={away.color} team={away}/></div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px"}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:away.color,flexShrink:0}}/><span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)",letterSpacing:.5}}>{away.name}</span></div>
           <span style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontWeight:600,letterSpacing:1}}>{al.formation.label}</span>
@@ -289,7 +354,7 @@ function FieldLineup({home,away,fixtures}){
   );
 }
 
-function FixturesTab({teams,fixtures}){
+function FixturesTab({teams,fixtures,onPlayerClick}){
   const[filter,setFilter]=useState("all");
   const[expandedId,setExpandedId]=useState(null);
   const currentMW=useMemo(()=>currentMatchWeek(fixtures),[fixtures]);
@@ -328,7 +393,7 @@ function FixturesTab({teams,fixtures}){
                 {expanded&&!f.played&&(f.matchWeek==null||f.matchWeek===currentMW)&&(
                   <div style={{borderTop:`1px solid ${C.border}`,padding:"14px 14px",background:C.surface}}>
                     <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.text,textTransform:"uppercase",textAlign:"center",marginBottom:14}}>Predicted Lineups</div>
-                    <FieldLineup home={h} away={a} fixtures={fixtures}/>
+                    <FieldLineup home={h} away={a} fixtures={fixtures} onPlayerClick={onPlayerClick}/>
                     <div style={{fontSize:10,color:C.muted,marginTop:8,textAlign:"center"}}>Based on form & availability</div>
                   </div>
                 )}
@@ -871,6 +936,7 @@ function App(){
   const[loaded,setLoaded]=useState(false);
   const[teams,setTeams]=useState([]);
   const[fixtures,setFixtures]=useState([]);
+  const[profilePlayer,setProfilePlayer]=useState(null);
 
   useEffect(()=>{
     loadState().then(data=>{
@@ -920,6 +986,7 @@ function App(){
   return(
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:"'DM Sans',sans-serif",color:C.text}}>
       {toast&&<div style={{position:"fixed",top:16,left:"50%",transform:"translateX(-50%)",background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 20px",fontSize:13,fontWeight:600,color:C.text,zIndex:999,boxShadow:"0 4px 20px #00000066",whiteSpace:"nowrap"}}>{toast}</div>}
+      {profilePlayer&&<PlayerProfileModal data={profilePlayer} fixtures={fixtures} onClose={()=>setProfilePlayer(null)}/>}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,position:"sticky",top:0,zIndex:100}}>
         <div style={{maxWidth:720,margin:"0 auto",padding:"0 16px"}}>
           <div style={{paddingTop:16,display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
@@ -935,7 +1002,7 @@ function App(){
         </div>
       </div>
       <div style={{maxWidth:720,margin:"0 auto",padding:"24px 16px 100px"}}>
-        {tab==="fixtures"&&<FixturesTab teams={teams} fixtures={fixtures}/>}
+        {tab==="fixtures"&&<FixturesTab teams={teams} fixtures={fixtures} onPlayerClick={setProfilePlayer}/>}
         {tab==="table"   &&<TableTab teams={teams} fixtures={fixtures}/>}
         {tab==="stats"   &&<StatsTab teams={teams} fixtures={fixtures}/>}
         {tab==="ratings" &&<RatingsTab teams={teams}/>}
