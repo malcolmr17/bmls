@@ -266,13 +266,13 @@ function FieldLineup({home,away,fixtures}){
           <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:home.color,flexShrink:0}}/><span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)",letterSpacing:.5}}>{home.name}</span></div>
           <span style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontWeight:600,letterSpacing:1}}>{hl.formation.label}</span>
         </div>
-        {hl.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:20}}><Dot p={hl.gk} color={home.color}/></div>}
-        {homeRows.map((row,i)=><div key={i} style={{marginBottom:20}}><PlayerRow players={row} color={home.color}/></div>)}
-        <div style={{display:"flex",alignItems:"center",gap:8,margin:"16px 0"}}>
+        {hl.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:28}}><Dot p={hl.gk} color={home.color}/></div>}
+        {homeRows.map((row,i)=><div key={i} style={{marginBottom:28}}><PlayerRow players={row} color={home.color}/></div>)}
+        <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0"}}>
           <div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/><span style={{fontSize:8,color:"rgba(255,255,255,0.4)",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>kick off</span><div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/>
         </div>
-        {awayRows.map((row,i)=><div key={i} style={{marginBottom:20}}><PlayerRow players={row} color={away.color}/></div>)}
-        {al.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:18}}><Dot p={al.gk} color={away.color}/></div>}
+        {awayRows.map((row,i)=><div key={i} style={{marginBottom:28}}><PlayerRow players={row} color={away.color}/></div>)}
+        {al.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}><Dot p={al.gk} color={away.color}/></div>}
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px"}}>
           <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:away.color,flexShrink:0}}/><span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)",letterSpacing:.5}}>{away.name}</span></div>
           <span style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontWeight:600,letterSpacing:1}}>{al.formation.label}</span>
@@ -320,7 +320,7 @@ function FixturesTab({teams,fixtures}){
                 </div>
                 {expanded&&!f.played&&(f.matchWeek==null||f.matchWeek===currentMW)&&(
                   <div style={{borderTop:`1px solid ${C.border}`,padding:"14px 14px",background:C.surface}}>
-                    <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:"uppercase",textAlign:"center",marginBottom:12}}>Predicted Lineups</div>
+                    <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.text,textTransform:"uppercase",textAlign:"center",marginBottom:14}}>Predicted Lineups</div>
                     <FieldLineup home={h} away={a} fixtures={fixtures}/>
                     <div style={{fontSize:10,color:C.muted,marginTop:8,textAlign:"center"}}>Based on form & availability</div>
                   </div>
