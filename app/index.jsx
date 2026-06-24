@@ -1010,7 +1010,10 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
               <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Home Team</div><Sel value={editFix.homeId||""} onChange={v=>{const nf={...editFix,homeId:+v};setEditFix({...nf,playerStats:initFixStats(nf,teams)});}} options={[{value:"",label:"Select..."},...named.map(t=>({value:t.id,label:t.name}))]}/></div>
               <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Away Team</div><Sel value={editFix.awayId||""} onChange={v=>{const nf={...editFix,awayId:+v};setEditFix({...nf,playerStats:initFixStats(nf,teams)});}} options={[{value:"",label:"Select..."},...named.map(t=>({value:t.id,label:t.name}))]}/></div>
             </div>
-            <div style={{marginBottom:12}}><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Date</div><Inp type="date" value={editFix.date} onChange={v=>setEditFix({...editFix,date:v})}/></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Date</div><Inp type="date" value={editFix.date} onChange={v=>setEditFix({...editFix,date:v})}/></div>
+              <div><div style={{fontSize:11,color:C.muted,marginBottom:4}}>Match Week</div><Inp type="number" min="1" value={editFix.matchWeek??""} placeholder="—" onChange={v=>setEditFix({...editFix,matchWeek:v===''?null:+v})}/></div>
+            </div>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
               <input type="checkbox" id="played" checked={!!editFix.played} onChange={e=>setEditFix({...editFix,played:e.target.checked})} style={{accentColor:C.accent,width:16,height:16}}/>
               <label htmlFor="played" style={{color:C.sub,fontSize:13,cursor:"pointer"}}>Mark as played</label>
