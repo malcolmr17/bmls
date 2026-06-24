@@ -1,0 +1,43 @@
+name: Deploy BMLS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        working-directory: api
+        run: |
+          npm ci
+          npm prune --omit=dev
+
+      - name: Write .env
+        run: |
+          cat > /tmp/bmls.env << 'EOF'
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          PORT=3006
+          EOF
+
+      - name: Deploy to droplet
+        env:
+          HOST: ${{ secrets.DO_HOST }}
+          USER: ${{ secrets.DO_USER }}
+        run: |
+          echo "${{ secrets.DO_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          SSHOPTS="-i /tmp/deploy_key -o StrictHostKeyChecking=no"
+
+          rsync -az --delete -e "ssh $SSHOPTS" api/          $USER@$HOST:~/bmls-api/
+          rsync -az -e         "ssh $SSHOPTS" index.html     $USER@$HOST:~/bmls-api/
+          rsync -az -e         "ssh $SSHOPTS" /tmp/bmls.env  $USER@$HOST:~/bmls-api/.env
+
+          ssh $SSHOPTS $USER@$HOST "pm2 restart bmls-api || pm2 start ~/bmls-api/server.js --name bmls-api && pm2 save"
