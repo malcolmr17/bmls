@@ -89,9 +89,14 @@ function playerFormScore(playerId,fixtures){
 }
 
 function arrangeWide(arr){
-  if(arr.length!==3)return arr;
+  if(arr.length<2)return arr;
   const w=arr.filter(p=>p.wide),c=arr.filter(p=>!p.wide);
-  if(w.length>=2)return[w[0],...c.slice(0,1),w[1]];
+  if(w.length===0)return arr;
+  if(arr.length===2)return w.length>=2?arr:[w[0],c[0]];
+  if(arr.length===3){
+    if(w.length>=2)return[w[0],...c.slice(0,1),w[1]];
+    return[w[0],...c];
+  }
   return arr;
 }
 
@@ -110,8 +115,8 @@ function predictedLineup(team,fixtures){
   const altUsed=new Set();
   const defs=[...primaryDefs];
   const fwds=[...primaryFwds];
-  altPool.filter(p=>p.altPosition==="DEF"&&!altUsed.has(p.id)).slice(0,formation.def-defs.length).forEach(p=>{defs.push({...p,position:"DEF"});altUsed.add(p.id);});
-  altPool.filter(p=>p.altPosition==="FWD"&&!altUsed.has(p.id)).slice(0,formation.fwd-fwds.length).forEach(p=>{fwds.push({...p,position:"FWD"});altUsed.add(p.id);});
+  altPool.filter(p=>p.altPosition==="DEF"&&!altUsed.has(p.id)).slice(0,formation.def-defs.length).forEach(p=>{defs.push({...p,position:"DEF",wide:true});altUsed.add(p.id);});
+  altPool.filter(p=>p.altPosition==="FWD"&&!altUsed.has(p.id)).slice(0,formation.fwd-fwds.length).forEach(p=>{fwds.push({...p,position:"FWD",wide:true});altUsed.add(p.id);});
   return{gk:gk||null,defs:arrangeWide(defs),mdfs:primaryMdfs,fwds:arrangeWide(fwds),formation};
 }
 
@@ -235,7 +240,7 @@ function FieldLineup({home,away,fixtures}){
       <div style={{width:34,height:34,borderRadius:"50%",background:color,border:"2.5px solid rgba(255,255,255,0.9)",boxShadow:"0 2px 8px rgba(0,0,0,0.5)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
         <span style={{fontSize:7,fontWeight:900,color:"rgba(255,255,255,0.95)",letterSpacing:.5,textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.position==="GK"?"GK":p.position}</span>
       </div>
-      <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:54,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{p.name||"?"}</span>
+      <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:54,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
     </div>
   );
   const PlayerRow=({players,color})=>(
