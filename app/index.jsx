@@ -1104,6 +1104,187 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,o
   );
 }
 
+function generateArticles(teams,fixtures,transfers){
+  const articles=[];
+  const named=teams.filter(t=>t.name);
+  if(named.length===0)return[];
+  const pick=(arr,seed)=>arr[Math.abs(seed)%arr.length];
+  const currentMW=currentMatchWeek(fixtures);
+  const pStats=computePlayerStats(teams,fixtures);
+  const table=computeTable(teams,fixtures);
+
+  // transfers
+  [...transfers].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4).forEach(t=>{
+    const seed=t.playerOut.name.length*7+t.playerIn.name.length*3;
+    articles.push({
+      tag:'Transfer',color:C.accent,
+      headline:pick([
+        `${t.playerOut.name} completes switch to ${t.toTeamName} in swap deal`,
+        `Done deal: ${t.toTeamName} land ${t.playerOut.name} as ${t.playerIn.name} heads the other way`,
+        `Swap confirmed — ${t.playerOut.name} and ${t.playerIn.name} change clubs`,
+      ],seed),
+      body:pick([
+        `${t.fromTeamName} and ${t.toTeamName} have wrapped up a straight swap: ${t.playerOut.name} (${t.playerOut.position}) moves to ${t.toTeamName} with ${t.playerIn.name} (${t.playerIn.position}) heading in the opposite direction. Both managers spoke positively about the deal and the players are expected to feature immediately.`,
+        `In a surprise move, ${t.playerOut.name} has departed ${t.fromTeamName} for ${t.toTeamName} in exchange for ${t.playerIn.name}. Confirmed on ${t.date}, the swap gives both clubs fresh options heading into the coming match weeks. Scouts on both sides had been monitoring the situation for some time.`,
+      ],seed+1),
+      date:t.date,priority:1,
+    });
+  });
+
+  // match reports
+  [...fixtures.filter(f=>f.played&&f.homeId&&f.awayId)]
+    .sort((a,b)=>(b.matchWeek||0)-(a.matchWeek||0)||(b.date||'').localeCompare(a.date||''))
+    .slice(0,4).forEach(f=>{
+      const home=named.find(t=>t.id===f.homeId),away=named.find(t=>t.id===f.awayId);
+      if(!home||!away)return;
+      const hWin=f.homeScore>f.awayScore,draw=f.homeScore===f.awayScore;
+      const winner=hWin?home:away,loser=hWin?away:home;
+      const ws=hWin?f.homeScore:f.awayScore,ls=hWin?f.awayScore:f.homeScore;
+      const mw=f.matchWeek?` in Match Week ${f.matchWeek}`:'';
+      const topPs=(f.playerStats||[]).filter(ps=>(ps.goals||0)>0).sort((a,b)=>b.goals-a.goals)[0];
+      const scorerName=topPs?pStats.find(p=>p.playerId===topPs.playerId)?.name:null;
+      const motmPs=(f.playerStats||[]).filter(ps=>(ps.rating||0)>0).sort((a,b)=>b.rating-a.rating)[0];
+      const motmName=motmPs?pStats.find(p=>p.playerId===motmPs.playerId)?.name:null;
+      let headline,body;
+      if(draw){
+        headline=`${home.name} and ${away.name} share the spoils — ${f.homeScore}-${f.awayScore}`;
+        body=`Neither side could find a winner as ${home.name} and ${away.name} played out a ${f.homeScore}-all draw${mw}. A point each, though both camps will feel they could have done more to claim all three.`;
+      } else if(ws-ls>=3){
+        headline=`${winner.name} run riot — ${ws}-${ls} demolition job on ${loser.name}`;
+        body=`${winner.name} were simply unstoppable, tearing ${loser.name} apart with a blistering ${ws}-${ls} victory${mw}. It was as one-sided as the scoreline suggests, sending a clear statement of intent to the rest of the league.`;
+      } else if(ws-ls===2){
+        headline=`${winner.name} see off ${loser.name} with comfortable ${ws}-${ls} win`;
+        body=`${winner.name} were rarely troubled, easing to a ${ws}-${ls} success against ${loser.name}${mw}. They never looked like surrendering their advantage once ahead and will be pleased with another three points in the bank.`;
+      } else {
+        headline=`${winner.name} nick it ${ws}-${ls} in a thriller against ${loser.name}`;
+        body=`${winner.name} claimed a hard-fought ${ws}-${ls} win over a tenacious ${loser.name}${mw}. It was far from pretty but they got the job done when it mattered most.`;
+      }
+      if(scorerName)body+=` ${scorerName} got on the scoresheet for the winners.`;
+      if(motmName&&(motmPs?.rating||0)>=8)body+=` ${motmName} was the standout performer, earning a ${motmPs.rating} match rating.`;
+      articles.push({tag:'Match Report',color:C.gold,headline,body,date:f.date||`MW${f.matchWeek}`,priority:2});
+    });
+
+  // fixture previews
+  if(currentMW){
+    fixtures.filter(f=>f.matchWeek===currentMW&&!f.played&&f.homeId&&f.awayId).slice(0,4).forEach(f=>{
+      const home=named.find(t=>t.id===f.homeId),away=named.find(t=>t.id===f.awayId);
+      if(!home||!away)return;
+      const o=calcOdds(home,away);
+      const pred=predictMatch(home,away);
+      const fav=o.pHome>o.pAway?home:away,dog=o.pHome>o.pAway?away:home;
+      const favP=Math.max(o.pHome,o.pAway);
+      const seed=f.homeId*31+f.awayId;
+      let headline,body;
+      if(favP>=70){
+        headline=pick([`${fav.name} overwhelming favorites — can ${dog.name} defy the odds?`,`${dog.name} face a mountain to climb against in-form ${fav.name}`],seed);
+        body=`${fav.name} head into Match Week ${currentMW} as firm favorites with a ${favP}% win probability. Analysts are predicting a ${pred.hGoals}-${pred.aGoals} scoreline and it is hard to argue with the models. ${dog.name} will need a performance of their lives to come away with anything.`;
+      } else if(favP>=57){
+        headline=pick([`${fav.name} slight edge over ${dog.name} in Match Week ${currentMW} clash`,`${home.name} vs ${away.name}: Fine margins expected`],seed);
+        body=`${fav.name} are marginally favored (${favP}%) going into their Match Week ${currentMW} showdown with ${dog.name}. A ${pred.hGoals}-${pred.aGoals} scoreline is projected but this is far from a foregone conclusion. ${dog.name} are capable of causing problems and could easily steal a result.`;
+      } else {
+        headline=`${home.name} vs ${away.name} — the most unpredictable fixture of Match Week ${currentMW}`;
+        body=`The bookmakers can barely separate ${home.name} and ${away.name} ahead of their Match Week ${currentMW} meeting. With win probabilities almost neck and neck, this could be the most enthralling game of the round. Neutrals will want to watch this one.`;
+      }
+      articles.push({tag:'Preview',color:C.purple,headline,body,date:`Match Week ${currentMW}`,priority:3});
+    });
+  }
+
+  // form guide
+  const formTeams=table.filter(r=>r.form.length>=3);
+  if(formTeams.length>0){
+    const pts3=f=>f.slice(-3).filter(r=>r==='W').length*3+f.slice(-3).filter(r=>r==='D').length;
+    const hot=[...formTeams].sort((a,b)=>pts3(b.form)-pts3(a.form))[0];
+    const cold=[...formTeams].sort((a,b)=>b.form.slice(-3).filter(r=>r==='L').length-a.form.slice(-3).filter(r=>r==='L').length)[0];
+    const hotW=hot.form.slice(-3).filter(r=>r==='W').length;
+    if(hotW>=2)articles.push({tag:'Form Guide',color:'#f97316',headline:`${hot.name} in red-hot form — ${hotW} wins from last 3`,body:`${hot.name} are the in-form side in the division right now, picking up ${hotW} wins from their last three outings. Confidence is sky-high and they look like a team that knows exactly how to win. Opponents will be dreading their next encounter with them.`,date:'Form Guide',priority:3});
+    const coldL=cold?.form.slice(-3).filter(r=>r==='L').length||0;
+    if(cold&&coldL>=2&&cold.name!==hot.name)articles.push({tag:'Form Guide',color:C.muted,headline:`${cold.name} in freefall — ${coldL} defeats from last 3`,body:`Alarm bells are ringing at ${cold.name} after a run of ${coldL} losses in their last three matches. Something needs to change quickly and the manager will be under pressure to find answers. With more difficult fixtures on the horizon, this slump could get worse before it gets better.`,date:'Form Guide',priority:3});
+  }
+
+  // table leader
+  if(table.length>0&&table[0].p>0){
+    const lead=table[0],sec=table[1];
+    const gap=lead.pts-(sec?.pts||0);
+    articles.push({tag:'Table Update',color:C.gold,headline:`${lead.name} sitting pretty at the top — ${gap} point${gap!==1?'s':''} clear`,body:`${lead.name} lead the pack on ${lead.pts} point${lead.pts!==1?'s':''} from ${lead.p} game${lead.p!==1?'s':''}${gap>=3&&sec?`, with ${sec.name} trailing by ${gap}.`:`.`} Their goal difference of ${lead.gf-lead.ga>0?'+':''}${lead.gf-lead.ga} tells the story of a team firing on all cylinders. The title is there to lose if they maintain this form.`,date:'Standings',priority:4});
+  }
+
+  // golden boot
+  const scorers=pStats.filter(p=>p.goals>0).sort((a,b)=>b.goals-a.goals);
+  if(scorers.length>0){
+    const top=scorers[0],sec=scorers[1];
+    let body=`${top.name} (${top.teamName}) leads the golden boot race with ${top.goals} goal${top.goals!==1?'s':''} from ${top.apps} app${top.apps!==1?'s':''}.`;
+    if(sec&&sec.goals===top.goals)body+=` ${sec.name} (${sec.teamName}) is level, making it a straight shoot-out for the award.`;
+    else if(sec&&top.goals-sec.goals===1)body+=` ${sec.name} (${sec.teamName}) is just one behind and breathing down their neck.`;
+    else if(sec)body+=` ${sec.name} (${sec.teamName}) is the nearest challenger on ${sec.goals}. The race is on.`;
+    articles.push({tag:'Golden Boot',color:C.red,headline:`${top.name} leads the race for golden boot with ${top.goals} goal${top.goals!==1?'s':''}`,body,date:'Season Stats',priority:4});
+  }
+
+  // player of the season (avg rating)
+  const ratedP=pStats.filter(p=>p.ratings.length>=2).sort((a,b)=>parseFloat(b.avgRating)-parseFloat(a.avgRating));
+  if(ratedP.length>0){
+    const star=ratedP[0];
+    articles.push({tag:'Player Watch',color:C.purple,headline:`${star.name} is the league's standout performer — avg rating ${star.avgRating}`,body:`No player has been more consistent than ${star.name} (${star.teamName}), who boasts an average match rating of ${star.avgRating} from ${star.ratings.length} appearance${star.ratings.length!==1?'s':''}. The ${star.position} is the first name on the teamsheet every week and opposing managers spend hours trying to work out how to stop them.`,date:'Season Stats',priority:4});
+  }
+
+  // clean sheet king
+  const gks=pStats.filter(p=>p.cleanSheets>0&&p.position==='GK').sort((a,b)=>b.cleanSheets-a.cleanSheets);
+  if(gks.length>0){
+    const gk=gks[0];
+    articles.push({tag:'Goalkeeper Watch',color:C.green,headline:`${gk.name} is the wall — ${gk.cleanSheets} clean sheet${gk.cleanSheets!==1?'s':''} and counting`,body:`${gk.name} (${gk.teamName}) has been in exceptional form between the sticks this season, keeping ${gk.cleanSheets} clean sheet${gk.cleanSheets!==1?'s':''} in ${gk.apps} appearance${gk.apps!==1?'s':''}. Strikers have been left bamboozled all campaign and ${gk.teamName}'s defensive record owes much to their outstanding shot-stopper.`,date:'Season Stats',priority:4});
+  }
+
+  // power rankings
+  const ratingsList=named.map(t=>({t,...lineupRatings(t)})).filter(r=>r.atk>0||r.def>0);
+  if(ratingsList.length>=2){
+    const byAtk=[...ratingsList].sort((a,b)=>b.atk-a.atk);
+    const byDef=[...ratingsList].sort((a,b)=>b.def-a.def);
+    const topA=byAtk[0],topD=byDef[0];
+    articles.push({tag:'Power Rankings',color:C.green,headline:`${topA.t.name} rated the most dangerous side in the league`,body:`${topA.t.name} hold an attack rating of ${topA.atk} — higher than any other club. On the flip side, ${topD.t.name} are the toughest team to score against, carrying a defensive rating of ${topD.def}. A future meeting between these two promises to be the tactical chess match of the season.`,date:'Power Rankings',priority:5});
+    const weakest=[...ratingsList].sort((a,b)=>(a.atk+a.def)-(b.atk+b.def))[0];
+    if(weakest.t.id!==topA.t.id){
+      articles.push({tag:'Analysis',color:C.muted,headline:`${weakest.t.name} propped up in the ratings — but can they defy expectations?`,body:`On paper, ${weakest.t.name} have the lowest combined rating in the division (ATK ${weakest.atk}, DEF ${weakest.def}). The numbers don't lie, but football is played on the pitch, not on spreadsheets. Every dog has its day — could this be theirs?`,date:'Analysis',priority:5});
+    }
+    // odds spotlight
+    let bigMatch=null,bigProb=0;
+    fixtures.filter(f=>!f.played&&f.homeId&&f.awayId).forEach(f=>{
+      const h=named.find(t=>t.id===f.homeId),a=named.find(t=>t.id===f.awayId);
+      if(!h||!a)return;
+      const o=calcOdds(h,a);
+      const p=Math.max(o.pHome,o.pAway);
+      if(p>bigProb){bigProb=p;bigMatch={f,h,a,o};}
+    });
+    if(bigMatch&&bigProb>=65){
+      const{f,h,a,o}=bigMatch;
+      const fav=o.pHome>o.pAway?h:a,dog=o.pHome>o.pAway?a:h;
+      const favOdds=o.pHome>o.pAway?o.home:o.away;
+      articles.push({tag:'Betting',color:'#10b981',headline:`${fav.name} the banker bet — ${favOdds} odds-on against ${dog.name}`,body:`Punters are flooding in on ${fav.name} to win${f.matchWeek?` in Match Week ${f.matchWeek}`:''}. With a ${bigProb}% win probability and odds of just ${favOdds}, they are the standout selection on the card. Anyone brave enough to back ${dog.name} at this price deserves enormous credit if they pull it off.`,date:f.matchWeek?`Match Week ${f.matchWeek}`:'Upcoming',priority:3});
+    }
+  }
+
+  return articles.sort((a,b)=>a.priority-b.priority);
+}
+
+function NewsTab({teams,fixtures,transfers}){
+  const articles=useMemo(()=>generateArticles(teams,fixtures,transfers),[teams,fixtures,transfers]);
+  const tagBg=color=>color+'22';
+  if(articles.length===0)return<Empty icon="📰" msg="No news yet." hint="Add teams, fixtures and results to generate articles."/>;
+  return(
+    <div>
+      <SLabel>Latest News</SLabel>
+      {articles.map((a,i)=>(
+        <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px",marginBottom:12,borderLeft:`3px solid ${a.color}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <span style={{background:tagBg(a.color),color:a.color,borderRadius:4,padding:"3px 8px",fontSize:10,fontWeight:700,letterSpacing:.5,textTransform:"uppercase"}}>{a.tag}</span>
+            <span style={{fontSize:10,color:C.muted}}>{a.date}</span>
+          </div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:19,lineHeight:1.15,color:C.white,letterSpacing:.5,marginBottom:8}}>{a.headline}</div>
+          <div style={{fontSize:12,color:C.sub,lineHeight:1.6}}>{a.body}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const TABS=[
   {id:"fixtures",  label:"Fixtures"},
   {id:"table",     label:"Table"},
@@ -1111,6 +1292,7 @@ const TABS=[
   {id:"ratings",   label:"Ratings"},
   {id:"squads",    label:"Squads"},
   {id:"transfers", label:"Transfers"},
+  {id:"news",      label:"News"},
   {id:"odds",      label:"Odds"},
   {id:"manage",    label:"⚙ Manage"},
 ];
@@ -1197,6 +1379,7 @@ function App(){
         {tab==="ratings" &&<RatingsTab teams={teams}/>}
         {tab==="squads"    &&<SquadsTab teams={teams} setTeams={setTeams}/>}
         {tab==="transfers" &&<TransfersTab transfers={transfers} teams={teams}/>}
+        {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers}/>}
         {tab==="odds"      &&<OddsTab teams={teams} fixtures={fixtures}/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
