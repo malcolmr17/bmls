@@ -244,7 +244,7 @@ function FieldLineup({home,away,fixtures}){
     </div>
   );
   const PlayerRow=({players,color})=>(
-    <div style={{display:"flex",justifyContent:players.length===2?"space-between":"center",gap:players.length===2?0:6,padding:players.length===2?"0 8px":"0 4px",flexWrap:"wrap"}}>
+    <div style={{display:"flex",justifyContent:"center",gap:players.length===2?36:6,padding:"0 4px",flexWrap:"wrap"}}>
       {players.map(p=><Dot key={p.id} p={p} color={color}/>)}
     </div>
   );
