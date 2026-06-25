@@ -575,7 +575,6 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
             <span style={{fontSize:7,fontWeight:900,color:"rgba(255,255,255,0.95)",letterSpacing:.5,textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.position==="GK"?"GK":p.position}</span>
           </div>
           {isCap&&<div style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"#F59E0B",fontSize:7,fontWeight:900,color:"#000",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 3px rgba(0,0,0,0.5)"}}>C</div>}
-          {!isCap&&isPen&&<div style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"#3B82F6",fontSize:7,fontWeight:900,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 3px rgba(0,0,0,0.5)"}}>P</div>}
         </div>
         <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:54,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
       </div>
@@ -2906,6 +2905,13 @@ function CareerTransferView({career,onUpdate}){
     const updTeams=career.teams.map(t=>t.id===career.myTeamId?{...t,players:t.players.map(p=>p.id===pid?{...p,untouchable:!p.untouchable}:p)}:t);
     onUpdate({...career,teams:updTeams});
   };
+  const toggleCareerRole=(pid,roleId)=>{
+    const updTeams=career.teams.map(t=>t.id!==career.myTeamId?t:{...t,players:t.players.map(p=>{
+      if(p.id===pid){const has=(p.roles||[]).includes(roleId);return{...p,roles:has?(p.roles||[]).filter(r=>r!==roleId):[...(p.roles||[]),roleId]};}
+      return{...p,roles:(p.roles||[]).filter(r=>r!==roleId)};
+    })});
+    onUpdate({...career,teams:updTeams});
+  };
   const removeCpuBid=b=>onUpdate({...career,cpuBids:(career.cpuBids||[]).filter(cb=>cb.id!==b.id)});
   const acceptCpuBid=b=>{
     const{player,bidTeam,amount,swapPlayer}=b;
@@ -3097,17 +3103,24 @@ function CareerTransferView({career,onUpdate}){
             const mi=moodInfo(sat);
             const wantsOut=sat<40;
             return(
-              <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:C.card,border:`1px solid ${wantsOut?C.red+'55':C.border}`,borderRadius:8,marginBottom:6}}>
-                <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700}}>{p.position}</div>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}{wantsOut&&<span style={{fontSize:9,color:C.red,marginLeft:6,fontWeight:700}}>WANTS OUT</span>}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
-                    <div style={{width:64,height:5,borderRadius:3,background:C.border,overflow:'hidden',flexShrink:0}}><div style={{width:`${sat}%`,height:'100%',background:mi.color,borderRadius:3}}/></div>
-                    <span style={{fontSize:11,color:mi.color,fontWeight:700}}>{mi.label}</span>
-                    <span style={{fontSize:10,color:C.muted}}>{valDisplay(p,myTeam)}</span>
+              <div key={p.id} style={{background:C.card,border:`1px solid ${wantsOut?C.red+'55':C.border}`,borderRadius:8,marginBottom:6,overflow:'hidden'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px'}}>
+                  <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700}}>{p.position}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}{wantsOut&&<span style={{fontSize:9,color:C.red,marginLeft:6,fontWeight:700}}>WANTS OUT</span>}</div>
+                    <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
+                      <div style={{width:64,height:5,borderRadius:3,background:C.border,overflow:'hidden',flexShrink:0}}><div style={{width:`${sat}%`,height:'100%',background:mi.color,borderRadius:3}}/></div>
+                      <span style={{fontSize:11,color:mi.color,fontWeight:700}}>{mi.label}</span>
+                      <span style={{fontSize:10,color:C.muted}}>{valDisplay(p,myTeam)}</span>
+                    </div>
                   </div>
+                  <button onClick={()=>toggleUntouchable(p.id)} style={{background:p.untouchable?`${C.gold}22`:'transparent',border:`1px solid ${p.untouchable?C.gold:C.border}`,borderRadius:6,padding:'4px 8px',color:p.untouchable?C.gold:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>{p.untouchable?'🔒':'Lock'}</button>
                 </div>
-                <button onClick={()=>toggleUntouchable(p.id)} style={{background:p.untouchable?`${C.gold}22`:'transparent',border:`1px solid ${p.untouchable?C.gold:C.border}`,borderRadius:6,padding:'4px 10px',color:p.untouchable?C.gold:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>{p.untouchable?'🔒 Untouchable':'Lock'}</button>
+                <div style={{borderTop:`1px solid ${C.border}`,padding:'6px 12px',display:'flex',gap:5,flexWrap:'wrap'}}>
+                  {ROLES.map(role=>{const has=(p.roles||[]).includes(role.id);return(
+                    <button key={role.id} onClick={()=>toggleCareerRole(p.id,role.id)} style={{background:has?role.color+'33':'transparent',color:has?role.color:C.muted,border:`1px solid ${has?role.color:C.border}`,borderRadius:4,padding:'3px 7px',fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>{role.short}</button>
+                  );})}
+                </div>
               </div>
             );
           })}
@@ -3318,30 +3331,52 @@ function PlayoffsTab({teams,fixtures}){
   const saveBracket=b=>{localStorage.setItem(PLAYOFF_KEY,JSON.stringify(b));setBracketState(b);};
   const teamById=id=>teams.find(t=>t.id===id);
   const teamName=id=>teamById(id)?.name||'TBD';
+  const applyResult=(round,matchId,hScore,aScore)=>{
+    const matches=round==='final'?[bracket.final]:bracket[round];
+    const match=matches.find(m=>m.id===matchId);if(!match)return;
+    const winner=hScore>aScore?match.homeId:match.awayId;
+    let updated;
+    if(round==='final'){updated={...bracket,final:{...match,homeScore:hScore,awayScore:aScore,winnerId:winner},champion:winner,phase:'done'};}
+    else{const newRound=bracket[round].map(m=>m.id===matchId?{...m,homeScore:hScore,awayScore:aScore,winnerId:winner}:m);updated={...bracket,[round]:newRound};if(newRound.every(m=>m.winnerId))updated=advancePlayoffBracket(updated);}
+    saveBracket(updated);
+  };
   const playMatch=(round,matchId)=>{
     const matches=round==='final'?[bracket.final]:bracket[round];
     const match=matches.find(m=>m.id===matchId);if(!match)return;
     const ht=teamById(match.homeId),at=teamById(match.awayId);if(!ht||!at)return;
     const r=simPlayoffMatch(ht,at,fixtures);
-    const winner=r.hGoals>r.aGoals?match.homeId:match.awayId;
-    let updated;
-    if(round==='final'){updated={...bracket,final:{...match,homeScore:r.hGoals,awayScore:r.aGoals,winnerId:winner},champion:winner,phase:'done'};}
-    else{const newRound=bracket[round].map(m=>m.id===matchId?{...m,homeScore:r.hGoals,awayScore:r.aGoals,winnerId:winner}:m);updated={...bracket,[round]:newRound};if(newRound.every(m=>m.winnerId))updated=advancePlayoffBracket(updated);}
-    saveBracket(updated);
+    applyResult(round,matchId,r.hGoals,r.aGoals);
   };
   const MatchCard=({match,round,label})=>{
+    const[hi,setHi]=useState('');
+    const[ai,setAi]=useState('');
     if(!match)return null;
     const ht=teamById(match.homeId),at=teamById(match.awayId);
     const played=match.winnerId!=null,canPlay=!played&&match.homeId&&match.awayId;
+    const hv=parseInt(hi),av=parseInt(ai);
+    const canSave=canPlay&&hi!==''&&ai!==''&&!isNaN(hv)&&!isNaN(av)&&hv!==av;
+    const inp={background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 0',color:C.text,fontSize:16,fontFamily:"'Bebas Neue',sans-serif",outline:'none',width:'100%',textAlign:'center'};
     return(
       <div style={{background:C.card,border:`1px solid ${played?C.border:C.accent}`,borderRadius:8,padding:'10px 12px',marginBottom:6}}>
         {label&&<div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:6}}>{label}</div>}
-        <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:6,marginBottom:canPlay?8:0}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:6,marginBottom:6}}>
           <div style={{textAlign:'right',fontSize:12,fontWeight:match.winnerId===match.homeId?700:400,color:match.winnerId===match.homeId?C.text:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ht?.name||'TBD'}</div>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:played?26:16,color:played?C.gold:C.border,letterSpacing:3,textAlign:'center',padding:'0 6px'}}>{played?`${match.homeScore}–${match.awayScore}`:'vs'}</div>
           <div style={{fontSize:12,fontWeight:match.winnerId===match.awayId?700:400,color:match.winnerId===match.awayId?C.text:C.muted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{at?.name||'TBD'}</div>
         </div>
-        {canPlay&&<Btn onClick={()=>playMatch(round,match.id)} style={{width:'100%',fontSize:11}}>▶ Simulate</Btn>}
+        {canPlay&&(
+          <div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 24px 1fr',gap:4,alignItems:'center',marginBottom:6}}>
+              <input type="number" min="0" value={hi} onChange={e=>setHi(e.target.value)} placeholder="0" style={inp}/>
+              <div style={{textAlign:'center',color:C.muted,fontFamily:"'Bebas Neue',sans-serif"}}>–</div>
+              <input type="number" min="0" value={ai} onChange={e=>setAi(e.target.value)} placeholder="0" style={inp}/>
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <Btn onClick={()=>{if(canSave)applyResult(round,match.id,hv,av);}} style={{flex:1,fontSize:11,opacity:canSave?1:0.4}}>Save Result</Btn>
+              <Btn onClick={()=>playMatch(round,match.id)} variant="secondary" style={{flex:1,fontSize:11}}>▶ Simulate</Btn>
+            </div>
+          </div>
+        )}
         {!played&&!canPlay&&<div style={{fontSize:10,color:C.muted,textAlign:'center',fontStyle:'italic'}}>Awaiting previous round</div>}
       </div>
     );
