@@ -1994,7 +1994,7 @@ function buildCareerLineup(team,starters,formation,moods={}){
   const form=FORMATIONS.find(f=>f.id===formation)||FORMATIONS[0];
   const getP=(pos,idx)=>{
     const s=starters.find(s=>s.slotPos===pos&&s.slotIdx===idx);if(!s)return null;
-    const p=team.players.find(p=>p.id===s.playerId);if(!p)return null;
+    const p=team.players.find(p=>p.id===s.playerId);if(!p||p.injured||p.suspended)return null;
     const oop=p.position!==pos;
     const mm=moodInfo(moods[p.id]??65).mult;
     const mult=oop?0.7*mm:mm;
@@ -2300,7 +2300,7 @@ function CareerLineupView({career,onSave}){
   const starterIds=new Set(lineup.starters.map(s=>s.playerId));
   const available=(myTeam?.players||[]).filter(p=>!p.injured&&!p.suspended);
   const bench=available.filter(p=>!starterIds.has(p.id));
-  const getStarter=(pos,idx)=>{const s=lineup.starters.find(s=>s.slotPos===pos&&s.slotIdx===idx);return s?myTeam?.players.find(p=>p.id===s.playerId):null;};
+  const getStarter=(pos,idx)=>{const s=lineup.starters.find(s=>s.slotPos===pos&&s.slotIdx===idx);if(!s)return null;const p=myTeam?.players.find(p=>p.id===s.playerId);return(p&&!p.injured&&!p.suspended)?p:null;};
   const assign=(pos,idx,pid)=>{
     const others=lineup.starters.filter(s=>!(s.slotPos===pos&&s.slotIdx===idx)&&s.playerId!==pid);
     setLineup(l=>({...l,starters:[...others,{slotPos:pos,slotIdx:idx,playerId:pid}]}));setSelSlot(null);
@@ -2479,8 +2479,8 @@ function CareerSimView({career,onMatchComplete}){
       else if(!p.injured&&!p.suspended){delta-=5;if(myRes==='L')delta-=1;}
       updMoods[p.id]=Math.max(0,Math.min(100,Math.round((cur+delta)+(65-(cur+delta))*0.08)));
     });
-    // Transfer window: MW1 only — run one CPU-CPU trade then close the window
-    if(career.matchWeek===1){
+    // Transfer window: MW1–3 — run one CPU-CPU trade per matchweek, close after MW3
+    if(career.matchWeek<=3){
       const cpuTrade=maybeDoCpuTrade(career,updated.teams);
       if(cpuTrade){
         const{player,seller,buyer,amount,swapPlayer}=cpuTrade;
@@ -2492,8 +2492,8 @@ function CareerSimView({career,onMatchComplete}){
         updated={...updated,transfers:[...(updated.transfers||[]),{id:Date.now()+1,playerName:player.name,fromTeam:seller.name,toTeam:buyer.name,amount,swapPlayerName:swapPlayer.name,matchWeek:career.matchWeek,cpuTrade:true}]};
       }
     }
-    // Window closes after MW1 — clear any unresolved CPU bids
-    const nextCpuBids=career.matchWeek===1?[]:(career.cpuBids||[]);
+    // Window closes after MW3 — clear any unresolved CPU bids
+    const nextCpuBids=career.matchWeek===3?[]:(career.cpuBids||[]);
     onMatchComplete({...updated,playerStats:merged,playerMoods:updMoods,cpuBids:nextCpuBids,matchWeek:career.matchWeek+1,phase:'lineup'});
   };
 
@@ -2658,7 +2658,7 @@ function CareerTransferView({career,onUpdate}){
 
   const resetBid=()=>{setSel(null);setBid('');setTradePlayer(null);};
 
-  const windowOpen=career.matchWeek<=1;
+  const windowOpen=career.matchWeek<=3;
   const otherPlayers=career.teams.filter(t=>t.id!==career.myTeamId&&t.name).flatMap(t=>t.players.map(p=>({...p,_team:t}))).filter(p=>p.position!=='GK');
   const filtered=otherPlayers.filter(p=>(posFilter==='ALL'||p.position===posFilter)&&(!search||p.name.toLowerCase().includes(search.toLowerCase())));
 
@@ -2799,7 +2799,7 @@ function CareerTransferView({career,onUpdate}){
       </div>
       {pane==='market'&&(
         <div>
-          {!windowOpen&&<div style={{background:`${C.muted}18`,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',marginBottom:12,fontSize:12,color:C.muted,textAlign:'center',fontWeight:600}}>Transfer window closed — deals resume next season</div>}
+          {!windowOpen&&<div style={{background:`${C.muted}18`,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',marginBottom:12,fontSize:12,color:C.muted,textAlign:'center',fontWeight:600}}>Transfer window closed after MW3 — deals resume next season</div>}
           <div style={{opacity:windowOpen?1:0.4,pointerEvents:windowOpen?'auto':'none'}}>
           <div style={{display:'flex',gap:6,marginBottom:8}}>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search players…" style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 10px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none'}}/>
