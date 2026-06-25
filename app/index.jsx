@@ -2306,6 +2306,257 @@ function CareerSimView({career,onMatchComplete}){
   );
 }
 
+const ord=n=>{const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0]);};
+
+function CareerStatsView({career}){
+  const[tab,setTab]=useState('goals');
+  const reg={};career.teams.forEach(t=>t.players.forEach(p=>{reg[p.id]={...p,teamName:t.name,teamShort:t.shortName||t.name};}));
+  const entries=Object.entries(career.playerStats).map(([id,s])=>({...reg[id],...s,id})).filter(e=>e.name);
+  const TABS=[
+    {id:'goals',label:'⚽ Goals',field:'goals',sub:e=>`${e.penGoals||0} pen`},
+    {id:'assists',label:'🅰 Assists',field:'assists'},
+    {id:'cs',label:'🧤 Clean Sheets',field:'cleanSheets',only:'GK'},
+    {id:'cards',label:'🟡 Cards',field:'yellowCards',sub:e=>`${e.redCards||0} red`},
+  ];
+  const cur=TABS.find(t=>t.id===tab);
+  const list=[...entries].filter(e=>!cur.only||e.position===cur.only).sort((a,b)=>(b[cur.field]||0)-(a[cur.field]||0)).filter(e=>(e[cur.field]||0)>0).slice(0,15);
+  return(
+    <div>
+      <div style={{display:'flex',gap:5,marginBottom:14,overflowX:'auto'}}>
+        {TABS.map(t=>{const on=tab===t.id;return<button key={t.id} onClick={()=>setTab(t.id)} style={{background:on?`${C.accent}22`:'transparent',color:on?C.accent:C.muted,border:`1px solid ${on?C.accent:C.border}`,borderRadius:6,padding:'5px 10px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",whiteSpace:'nowrap'}}>{t.label}</button>;})}
+      </div>
+      {list.length===0?<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:32,fontStyle:'italic'}}>No data yet — play some matches.</div>:list.map((e,i)=>(
+        <div key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:6}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:i<3?C.gold:C.muted,width:26,textAlign:'center'}}>{i+1}</div>
+          <div style={{width:8,height:8,borderRadius:'50%',background:e.teamColor||C.accent,flexShrink:0}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1}}>{e.teamShort} · {e.position}</div>
+          </div>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.text,lineHeight:1}}>{e[cur.field]||0}</div>
+            {cur.sub&&<div style={{fontSize:9,color:C.muted}}>{cur.sub(e)}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function genCpuBids(career,myTeam){
+  const eligible=(myTeam?.players||[]).filter(p=>!p.untouchable&&(p.score||0)>=6);
+  if(!eligible.length)return[];
+  const cpuTeams=career.teams.filter(t=>t.id!==career.myTeamId&&t.name&&t.players.length);
+  if(!cpuTeams.length)return[];
+  const sh=a=>[...a].sort(()=>Math.random()-.5);
+  return sh(eligible).slice(0,Math.random()<.4?2:1).map(p=>{
+    const val=playerValue(p,myTeam);
+    return{player:p,bidTeam:sh(cpuTeams)[0],amount:Math.round(val*(0.65+Math.random()*.30)),val};
+  });
+}
+
+function CareerTransferView({career,onUpdate}){
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
+  const[pane,setPane]=useState('market');
+  const[posFilter,setPosFilter]=useState('ALL');
+  const[search,setSearch]=useState('');
+  const[sel,setSel]=useState(null);
+  const[bid,setBid]=useState('');
+  const[result,setResult]=useState(null);
+  const[cpuBids]=useState(()=>genCpuBids(career,myTeam));
+
+  const otherPlayers=career.teams.filter(t=>t.id!==career.myTeamId&&t.name).flatMap(t=>t.players.map(p=>({...p,_team:t})));
+  const filtered=otherPlayers.filter(p=>(posFilter==='ALL'||p.position===posFilter)&&(!search||p.name.toLowerCase().includes(search.toLowerCase())));
+
+  const doTrade=(player,fromTeam,amount)=>{
+    if((myTeam.careerBudget||0)<amount){setResult({type:'no_budget',amount});return;}
+    const {_team,...clean}=player;
+    const record={id:Date.now(),playerId:player.id,playerName:player.name,fromTeam:fromTeam.name,toTeam:myTeam.name,amount,matchWeek:career.matchWeek};
+    const updTeams=career.teams.map(t=>{
+      if(t.id===fromTeam.id)return{...t,careerBudget:(t.careerBudget||0)+amount,players:t.players.filter(p=>p.id!==player.id)};
+      if(t.id===career.myTeamId)return{...t,careerBudget:(t.careerBudget||0)-amount,players:[...t.players,clean]};
+      return t;
+    });
+    onUpdate({...career,teams:updTeams,transfers:[...career.transfers,record]});
+    setSel(null);setBid('');
+  };
+
+  const submitBid=()=>{
+    if(!sel||!bid)return;
+    const amt=parseInt(bid);if(isNaN(amt)||amt<=0)return;
+    const val=playerValue(sel,sel._team);
+    const pct=val>0?amt/val:0;
+    if(pct>=.90){doTrade(sel,sel._team,amt);setResult({type:'accepted',player:sel,amount:amt});}
+    else if(pct>=.65){
+      const r=Math.random();
+      if(r<.30){doTrade(sel,sel._team,amt);setResult({type:'accepted',player:sel,amount:amt});}
+      else if(r<.65){const counter=Math.round(val*(.90+Math.random()*.10));setResult({type:'counter',player:sel,amount:amt,counter,selTeam:sel._team});}
+      else{setResult({type:'rejected',player:sel,amount:amt});}
+    }else{setResult({type:'flat',player:sel,amount:amt});}
+  };
+
+  const toggleUntouchable=pid=>{
+    const updTeams=career.teams.map(t=>t.id===career.myTeamId?{...t,players:t.players.map(p=>p.id===pid?{...p,untouchable:!p.untouchable}:p)}:t);
+    onUpdate({...career,teams:updTeams});
+  };
+  const acceptCpuBid=bid=>{
+    const{player,bidTeam,amount}=bid;
+    const record={id:Date.now(),playerId:player.id,playerName:player.name,fromTeam:myTeam.name,toTeam:bidTeam.name,amount,matchWeek:career.matchWeek};
+    const updTeams=career.teams.map(t=>{
+      if(t.id===career.myTeamId)return{...t,careerBudget:(t.careerBudget||0)+amount,players:t.players.filter(p=>p.id!==player.id)};
+      if(t.id===bidTeam.id)return{...t,careerBudget:(t.careerBudget||0)-amount,players:[...t.players,{...player,untouchable:false}]};
+      return t;
+    });
+    onUpdate({...career,teams:updTeams,transfers:[...career.transfers,record]});
+  };
+
+  const valDisplay=(p,team)=>{
+    const v=playerValue(p,team);const s=p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
+    if(valueKnown(p))return`£${v}M`;
+    if(s>=5)return`£${Math.round(v*.8)}M–£${Math.round(v*1.2)}M`;
+    return'Unknown';
+  };
+
+  const resultColors={accepted:C.green,counter:C.gold,rejected:C.red,flat:C.red,no_budget:C.red};
+  const resultMsg=r=>r.type==='accepted'?`✓ Deal done! ${r.player.name} signed for £${r.amount}M`:r.type==='counter'?`Counter: they want £${r.counter}M`:r.type==='flat'?'✕ Bid too low — increase significantly':r.type==='no_budget'?`✕ Insufficient budget (need £${r.amount}M)`:r.type==='rejected'?'✕ Offer rejected':'' ;
+
+  return(
+    <div style={{paddingBottom:20}}>
+      {cpuBids.length>0&&(
+        <div style={{background:`${C.gold}15`,border:`1px solid ${C.gold}55`,borderRadius:10,padding:12,marginBottom:12}}>
+          <div style={{fontSize:10,color:C.gold,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Incoming Offers</div>
+          {cpuBids.map((b,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,padding:'8px 10px',background:C.card,borderRadius:7}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text}}>{b.player.name}</div>
+                <div style={{fontSize:10,color:C.muted}}>{b.bidTeam.name} offer £{b.amount}M</div>
+              </div>
+              <Btn onClick={()=>acceptCpuBid(b)} variant="success" small>Accept</Btn>
+              <Btn onClick={()=>{}} variant="secondary" small>Decline</Btn>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{display:'flex',gap:6,marginBottom:12}}>
+        {['market','squad'].map(p=>{const on=pane===p;return<button key={p} onClick={()=>setPane(p)} style={{flex:1,padding:'8px',borderRadius:7,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:12,background:on?`${C.accent}22`:'transparent',color:on?C.accent:C.muted,border:`1px solid ${on?C.accent:C.border}`}}>{p==='market'?'Transfer Market':'My Squad'}</button>;})}
+      </div>
+      {pane==='market'&&(
+        <div>
+          <div style={{display:'flex',gap:6,marginBottom:8}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search players…" style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 10px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none'}}/>
+            <select value={posFilter} onChange={e=>setPosFilter(e.target.value)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:7,padding:'7px 8px',color:C.muted,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:'none'}}>
+              {['ALL','GK','DEF','MDF','FWD'].map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          {result&&(
+            <div style={{background:`${resultColors[result.type]}22`,border:`1px solid ${resultColors[result.type]}55`,borderRadius:8,padding:'10px 12px',marginBottom:10,display:'flex',alignItems:'center',gap:10}}>
+              <div style={{flex:1,fontSize:13,color:C.text,fontWeight:600}}>{resultMsg(result)}</div>
+              {result.type==='counter'&&<Btn onClick={()=>{doTrade(result.player,result.selTeam,result.counter);setResult(null);}} variant="success" small>Accept £{result.counter}M</Btn>}
+              <button onClick={()=>setResult(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:16}}>✕</button>
+            </div>
+          )}
+          <div style={{maxHeight:400,overflowY:'auto'}}>
+            {filtered.map(p=>{
+              const isSel=sel?.id===p.id;
+              const val=valDisplay(p,p._team);
+              return(
+                <div key={p.id}>
+                  <div onClick={()=>{setSel(isSel?null:p);setBid('');setResult(null);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:isSel?`${C.accent}15`:C.card,border:`1px solid ${isSel?C.accent:C.border}`,borderRadius:isSel?'8px 8px 0 0':8,marginBottom:isSel?0:6,cursor:'pointer'}}>
+                    <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{p._team.name}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.text}}>{p.position==='GK'?'—':p.position==='MDF'?p.mdfAtkScore:p.score}</div>
+                      <div style={{fontSize:9,color:C.muted}}>{val}</div>
+                    </div>
+                  </div>
+                  {isSel&&(
+                    <div style={{background:C.surface,border:`1px solid ${C.accent}`,borderTop:'none',borderRadius:'0 0 8px 8px',padding:'10px 12px',marginBottom:6,display:'flex',gap:8,alignItems:'center'}}>
+                      <div style={{fontSize:10,color:C.muted,flexShrink:0}}>Bid (£M)</div>
+                      <input value={bid} onChange={e=>setBid(e.target.value)} type="number" min="1" placeholder="0" style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none'}}/>
+                      <Btn onClick={submitBid} small>Submit Bid</Btn>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {filtered.length===0&&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:24,fontStyle:'italic'}}>No players found.</div>}
+          </div>
+        </div>
+      )}
+      {pane==='squad'&&(
+        <div>
+          <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Mark untouchable to block CPU bids</div>
+          {(myTeam?.players||[]).map(p=>(
+            <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:6}}>
+              <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700}}>{p.position}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}</div>
+                <div style={{fontSize:10,color:C.muted}}>{valDisplay(p,myTeam)}</div>
+              </div>
+              <button onClick={()=>toggleUntouchable(p.id)} style={{background:p.untouchable?`${C.gold}22`:'transparent',border:`1px solid ${p.untouchable?C.gold:C.border}`,borderRadius:6,padding:'4px 10px',color:p.untouchable?C.gold:C.muted,fontSize:10,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>{p.untouchable?'🔒 Untouchable':'Lock'}</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function genCareerNews(career){
+  const articles=[];
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
+  const myName=myTeam?.name||'Your team';
+  const played=career.fixtures.filter(f=>f.played);
+  const myPlayed=played.filter(f=>f.homeId===career.myTeamId||f.awayId===career.myTeamId);
+  if(myPlayed.length>0){
+    const last=myPlayed[myPlayed.length-1];
+    const isH=last.homeId===career.myTeamId;
+    const opp=career.teams.find(t=>t.id===(isH?last.awayId:last.homeId));
+    const ms=isH?last.homeScore:last.awayScore,os=isH?last.awayScore:last.homeScore;
+    const outcome=ms>os?'WIN':ms<os?'DEFEAT':'DRAW';
+    const verb=ms>os?'beat':ms<os?'lost to':'drew with';
+    articles.push({id:'result',tag:outcome,tagColor:ms>os?C.green:ms<os?C.red:C.gold,title:`MW${last.matchWeek}: ${myName} ${outcome}`,body:`${myName} ${verb} ${opp?.name||'their opponents'} ${ms}–${os}. ${ms>os?'A solid performance.':ms<os?'A tough night.':'A hard fought point.'}`});
+  }
+  const reg={};career.teams.forEach(t=>t.players.forEach(p=>{reg[p.id]={...p,teamName:t.name};}));
+  const scorers=Object.entries(career.playerStats).filter(([_,s])=>(s.goals||0)>0).map(([id,s])=>({...reg[id],...s,id})).sort((a,b)=>(b.goals||0)-(a.goals||0));
+  if(scorers.length>0){
+    const top=scorers[0];
+    articles.push({id:'scorer',tag:'GOLDEN BOOT',tagColor:C.gold,title:`${top.name} tops the charts`,body:`${top.name} leads the career scoring charts with ${top.goals} goal${top.goals!==1?'s':''} for ${top.teamName||'their club'}${scorers.length>1?`, ${scorers.length-1} ahead of ${scorers[1].name} on ${scorers[1].goals}`:''}.`});
+  }
+  const table=computeTable(career.teams,played);
+  const myRow=table.find(r=>r.id===career.myTeamId);
+  const myPos=table.findIndex(r=>r.id===career.myTeamId)+1;
+  if(myRow&&played.length>0){
+    const comment=myPos===1?'top of the league':myPos<=3?'in the promotion places':myPos>=table.length-2?'fighting to avoid the drop':'in mid-table';
+    const leader=table[0];const leaderTeam=career.teams.find(t=>t.id===leader.id);
+    articles.push({id:'table',tag:'LEAGUE',tagColor:C.accent,title:`${myName} ${comment}`,body:`${myName} sit ${ord(myPos)} with ${myRow.pts} point${myRow.pts!==1?'s':''} from ${myRow.p} game${myRow.p!==1?'s':''}. ${myPos>1?`${leaderTeam?.name||'The leaders'} lead on ${leader.pts} points.`:''}`});
+  }
+  if(career.transfers.length>0){
+    const t=[...career.transfers].reverse()[0];
+    articles.push({id:'transfer',tag:'TRANSFER',tagColor:C.accent,title:`${t.playerName} moves on`,body:`${t.playerName} completed a transfer from ${t.fromTeam} to ${t.toTeam} for £${t.amount}M in Matchweek ${t.matchWeek}.`});
+  }
+  if(articles.length===0)articles.push({id:'empty',tag:'WELCOME',tagColor:C.muted,title:'Career mode — day one',body:`${myName} are ready for the season. Set your lineup and play your first match to get things started.`});
+  return articles;
+}
+
+function CareerNewsView({career}){
+  const articles=useMemo(()=>genCareerNews(career),[career]);
+  return(
+    <div>
+      {articles.map(a=>(
+        <div key={a.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:10}}>
+          <div style={{display:'inline-block',background:`${a.tagColor}22`,color:a.tagColor,fontSize:9,fontWeight:900,letterSpacing:2,borderRadius:4,padding:'2px 7px',textTransform:'uppercase',marginBottom:8}}>{a.tag}</div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.text,letterSpacing:.5,lineHeight:1.15,marginBottom:6}}>{a.title}</div>
+          <div style={{fontSize:13,color:C.sub,lineHeight:1.55}}>{a.body}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 const CAREER_VIEWS=[{id:'hub',label:'Hub'},{id:'lineup',label:'Lineup'},{id:'sim',label:'Match'},{id:'transfers',label:'Transfers'},{id:'table',label:'Table'},{id:'stats',label:'Stats'},{id:'news',label:'News'}];
 
 function CareerTab({teams}){
@@ -2334,9 +2585,9 @@ function CareerTab({teams}){
         {view==='table'    &&<CareerTableView career={career}/>}
         {view==='lineup'   &&<CareerLineupView career={career} onSave={lineup=>{update({...career,lineup});setView('hub');}}/>}
         {view==='sim'      &&<CareerSimView career={career} onMatchComplete={c=>{update(c);setView('hub');}}/>}
-        {view==='transfers'&&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Transfer market — coming next</div>}
-        {view==='stats'    &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Stats — coming next</div>}
-        {view==='news'     &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Career news — coming next</div>}
+        {view==='transfers'&&<CareerTransferView career={career} onUpdate={update}/>}
+        {view==='stats'    &&<CareerStatsView career={career}/>}
+        {view==='news'     &&<CareerNewsView career={career}/>}
       </div>
     </div>
   );
