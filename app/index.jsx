@@ -187,33 +187,48 @@ function simulateMatch(home,away,fixtures){
   const hPlayers=[hl.gk,...hl.defs,...hl.mdfs,...hl.fwds].filter(Boolean);
   const aPlayers=[al.gk,...al.defs,...al.mdfs,...al.fwds].filter(Boolean);
   if(!hPlayers.length||!aPlayers.length)return{hGoals:0,aGoals:0,events:[]};
-  const hGoals=pois(hxg),aGoals=pois(axg);
   const wPick=(items,wFn)=>{const ws=items.map(wFn),tot=ws.reduce((s,w)=>s+w,0);if(tot<=0)return items[Math.floor(Math.random()*items.length)];let r=Math.random()*tot;for(let i=0;i<items.length;i++){r-=ws[i];if(r<=0)return items[i];}return items[items.length-1];};
-  const scorW=p=>p.position==='FWD'?(p.score||5)*3:p.position==='MDF'?(p.mdfAtkScore||5)*1.2:p.position==='DEF'?0.4:0;
+  const scorW=p=>p.position==='FWD'?(p.score||5)*3:p.position==='MDF'?(p.mdfAtkScore||5)*1.2:p.position==='DEF'?(p.score||5)*.2:0;
   const astW=(p,sid)=>p.id===sid?0:p.position==='MDF'?(p.mdfAtkScore||5)*2.5:p.position==='FWD'?(p.score||5):p.position==='DEF'?0.3:0;
   const mnt=()=>Math.floor(Math.random()*90)+1;
   const events=[];
+  // Red cards first (rare — ~1 per 8 matches across both teams)
+  const redAt={};
+  const doReds=(players,team)=>players.forEach(p=>{if(Math.random()<0.006){const m=mnt();redAt[p.id]=m;events.push({team,type:'red',player:p,minute:m});}});
+  doReds(hPlayers,'home');doReds(aPlayers,'away');
+  // Early red card reduces that team's goals
+  const firstRed=ps=>ps.reduce((m,p)=>redAt[p.id]?Math.min(m,redAt[p.id]):m,91);
+  let hG=pois(hxg),aG=pois(axg);
+  if(firstRed(hPlayers)<70&&Math.random()<0.45)hG=Math.max(0,hG-1);
+  if(firstRed(aPlayers)<70&&Math.random()<0.45)aG=Math.max(0,aG-1);
+  // Goals — red-carded players excluded after their minute, no assist on pens
   const genGoals=(n,players,team)=>{
     const out=players.filter(p=>p.position!=='GK');if(!out.length)return;
     const topFWD=[...out].filter(p=>p.position==='FWD').sort((a,b)=>(b.score||0)-(a.score||0))[0]||out[0];
     const penTaker=players.find(p=>(p.roles||[]).includes('penTaker'))||topFWD;
     for(let i=0;i<n;i++){
+      const min=mnt();
+      const elig=out.filter(p=>!redAt[p.id]||redAt[p.id]>min);if(!elig.length)continue;
       const isPen=Math.random()<0.15;
-      const scorer=isPen?penTaker:wPick(out,scorW);
-      const astCands=players.filter(p=>p.id!==scorer.id);
-      const assist=Math.random()<0.78&&astCands.length?wPick(astCands,p=>astW(p,scorer.id)):null;
-      events.push({team,type:'goal',player:scorer,assist,minute:mnt(),isPen});
+      const pt=(!redAt[penTaker.id]||redAt[penTaker.id]>min)?penTaker:elig[0];
+      const scorer=isPen?pt:wPick(elig,scorW);
+      const astCands=isPen?[]:players.filter(p=>p.id!==scorer.id&&(!redAt[p.id]||redAt[p.id]>min));
+      const assist=!isPen&&Math.random()<0.78&&astCands.length?wPick(astCands,p=>astW(p,scorer.id)):null;
+      events.push({team,type:'goal',player:scorer,assist,minute:min,isPen});
     }
   };
-  const genCards=(players,team)=>players.forEach(p=>{
+  // Yellow cards — skip players already sent off
+  const genYellows=(players,team)=>players.forEach(p=>{
+    if(redAt[p.id])return;
     const r=Math.random(),yc=p.position==='DEF'?0.13:p.position==='MDF'?0.10:p.position==='FWD'?0.07:0.02;
-    if(r<0.025)events.push({team,type:'red',player:p,minute:mnt()});
-    else if(r<yc)events.push({team,type:'yellow',player:p,minute:mnt()});
+    if(r<yc)events.push({team,type:'yellow',player:p,minute:mnt()});
   });
-  genGoals(hGoals,hPlayers,'home');genGoals(aGoals,aPlayers,'away');
-  genCards(hPlayers,'home');genCards(aPlayers,'away');
+  genGoals(hG,hPlayers,'home');genGoals(aG,aPlayers,'away');
+  genYellows(hPlayers,'home');genYellows(aPlayers,'away');
   events.sort((a,b)=>a.minute-b.minute);
-  return{hGoals,aGoals,events};
+  const finalH=events.filter(e=>e.team==='home'&&e.type==='goal').length;
+  const finalA=events.filter(e=>e.team==='away'&&e.type==='goal').length;
+  return{hGoals:finalH,aGoals:finalA,events};
 }
 
 function MatchSimPanel({fixture,home,away,fixtures,sim,onSimulate,onApply}){
@@ -1905,33 +1920,48 @@ function buildCareerLineup(team,starters,formation){
 function simulateFromLineups(hl,al,hTeam,aTeam){
   const{hxg,axg}=predictMatch(hTeam,aTeam);
   const pois=λ=>{if(λ<=0)return 0;const L=Math.exp(-Math.min(λ,12));let k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;};
-  const hGoals=pois(hxg),aGoals=pois(axg);
   const wPick=(items,wFn)=>{const ws=items.map(wFn),tot=ws.reduce((s,w)=>s+w,0);if(tot<=0)return items[Math.floor(Math.random()*items.length)];let r=Math.random()*tot;for(let i=0;i<items.length;i++){r-=ws[i];if(r<=0)return items[i];}return items[items.length-1];};
-  const scorW=p=>p.position==='FWD'?(p.score||5)*3:p.position==='MDF'?(p.mdfAtkScore||5)*1.2:p.position==='DEF'?0.4:0;
+  const scorW=p=>p.position==='FWD'?(p.score||5)*3:p.position==='MDF'?(p.mdfAtkScore||5)*1.2:p.position==='DEF'?(p.score||5)*.2:0;
   const astW=(p,sid)=>p.id===sid?0:p.position==='MDF'?(p.mdfAtkScore||5)*2.5:p.position==='FWD'?(p.score||5):0.3;
   const mnt=()=>Math.floor(Math.random()*90)+1;
   const events=[];
+  const loPlayers=lo=>[lo.gk,...lo.defs,...lo.mdfs,...lo.fwds].filter(Boolean);
+  // Red cards first (rare)
+  const redAt={};
+  const doReds=(lo,team)=>loPlayers(lo).forEach(p=>{if(Math.random()<0.006){const m=mnt();redAt[p.id]=m;events.push({team,type:'red',player:p,minute:m});}});
+  doReds(hl,'home');doReds(al,'away');
+  const firstRedLo=lo=>loPlayers(lo).reduce((m,p)=>redAt[p.id]?Math.min(m,redAt[p.id]):m,91);
+  let hG=pois(hxg),aG=pois(axg);
+  if(firstRedLo(hl)<70&&Math.random()<0.45)hG=Math.max(0,hG-1);
+  if(firstRedLo(al)<70&&Math.random()<0.45)aG=Math.max(0,aG-1);
+  // Goals — red-card aware, no assist on pens
   const genGoals=(n,lo,team)=>{
-    const all=[lo.gk,...lo.defs,...lo.mdfs,...lo.fwds].filter(Boolean);
+    const all=loPlayers(lo);
     const out=all.filter(p=>p.position!=='GK');if(!out.length)return;
     const pen=all.find(p=>(p.roles||[]).includes('penTaker'))||[...out].filter(p=>p.position==='FWD').sort((a,b)=>(b.score||0)-(a.score||0))[0]||out[0];
     for(let i=0;i<n;i++){
+      const min=mnt();
+      const elig=out.filter(p=>!redAt[p.id]||redAt[p.id]>min);if(!elig.length)continue;
       const isPen=Math.random()<0.15;
-      const scorer=isPen?pen:wPick(out,scorW);
-      const ac=all.filter(p=>p.id!==scorer.id);
-      const assist=Math.random()<0.78&&ac.length?wPick(ac,p=>astW(p,scorer.id)):null;
-      events.push({team,type:'goal',player:scorer,assist,minute:mnt(),isPen});
+      const pt=(!redAt[pen.id]||redAt[pen.id]>min)?pen:elig[0];
+      const scorer=isPen?pt:wPick(elig,scorW);
+      const astCands=isPen?[]:all.filter(p=>p.id!==scorer.id&&(!redAt[p.id]||redAt[p.id]>min));
+      const assist=!isPen&&Math.random()<0.78&&astCands.length?wPick(astCands,p=>astW(p,scorer.id)):null;
+      events.push({team,type:'goal',player:scorer,assist,minute:min,isPen});
     }
   };
-  const genCards=(lo,team)=>[lo.gk,...lo.defs,...lo.mdfs,...lo.fwds].filter(Boolean).forEach(p=>{
+  // Yellows — skip red-carded players
+  const genYellows=(lo,team)=>loPlayers(lo).forEach(p=>{
+    if(redAt[p.id])return;
     const r=Math.random(),yc=p.position==='DEF'?0.13:p.position==='MDF'?.10:p.position==='FWD'?.07:.02;
-    if(r<.025)events.push({team,type:'red',player:p,minute:mnt()});
-    else if(r<yc)events.push({team,type:'yellow',player:p,minute:mnt()});
+    if(r<yc)events.push({team,type:'yellow',player:p,minute:mnt()});
   });
-  genGoals(hGoals,hl,'home');genGoals(aGoals,al,'away');
-  genCards(hl,'home');genCards(al,'away');
+  genGoals(hG,hl,'home');genGoals(aG,al,'away');
+  genYellows(hl,'home');genYellows(al,'away');
   events.sort((a,b)=>a.minute-b.minute);
-  return{hGoals,aGoals,events};
+  const finalH=events.filter(e=>e.team==='home'&&e.type==='goal').length;
+  const finalA=events.filter(e=>e.team==='away'&&e.type==='goal').length;
+  return{hGoals:finalH,aGoals:finalA,events};
 }
 
 const CAREER_KEY='bmls_career';
@@ -2256,6 +2286,9 @@ function CareerSimView({career,onMatchComplete}){
       if(!merged[pid])merged[pid]={goals:0,penGoals:0,assists:0,yellowCards:0,redCards:0,cleanSheets:0};
       Object.keys(s).forEach(k=>merged[pid][k]=(merged[pid][k]||0)+s[k]);
     });
+    // Auto-suspend my players who got red cards (cleared next matchweek)
+    const myRedIds=new Set(simData.events.filter(e=>e.type==='red'&&e.team===(isHome?'home':'away')).map(e=>e.player.id));
+    updated={...updated,teams:updated.teams.map(t=>t.id!==career.myTeamId?t:{...t,players:t.players.map(p=>({...p,suspended:myRedIds.has(p.id)}))})};
     onMatchComplete({...updated,playerStats:merged,matchWeek:career.matchWeek+1,phase:'lineup'});
   };
 
