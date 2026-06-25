@@ -2827,46 +2827,70 @@ function CareerOpponentView({career}){
   const myFix=career.fixtures.find(f=>f.matchWeek===career.matchWeek&&(f.homeId===career.myTeamId||f.awayId===career.myTeamId));
   if(!myFix||myFix.played)return<div style={{color:C.muted,textAlign:'center',paddingTop:40,fontSize:13}}>No upcoming fixture to scout.</div>;
   const isHome=myFix.homeId===career.myTeamId;
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
   const opp=career.teams.find(t=>t.id===(isHome?myFix.awayId:myFix.homeId));
   if(!opp)return null;
   const lo=predictedLineup(opp,played);
-  const{atk,def}=lineupRatings(opp);
-  const table=computeTable(career.teams,played);
-  const oppPos=table.findIndex(r=>r.id===opp.id)+1;
-  const oppRow=table.find(r=>r.id===opp.id);
+  const pred=isHome?predictMatch(myTeam,opp):predictMatch(opp,myTeam);
+  const myGoals=isHome?pred.hGoals:pred.aGoals;
+  const oppGoals=isHome?pred.aGoals:pred.hGoals;
+  const myXg=isHome?pred.hxg:pred.axg;
+  const oppXg=isHome?pred.axg:pred.hxg;
   const oppPlayed=played.filter(f=>f.homeId===opp.id||f.awayId===opp.id).slice(-3);
   const form=oppPlayed.map(f=>{const h=f.homeId===opp.id;const gs=h?f.homeScore:f.awayScore,ga=h?f.awayScore:f.homeScore;return gs>ga?'W':gs<ga?'L':'D';});
-  const rows=[{pos:'FWD',players:lo.fwds},{pos:'MDF',players:lo.mdfs},{pos:'DEF',players:lo.defs},{pos:'GK',players:lo.gk?[lo.gk]:[]}].filter(r=>r.players.length>0);
-  const sScore=p=>{if(p.position==='GK')return'—';const s=p.position==='MDF'?p.mdfAtkScore:p.score;const max=p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);if(valueKnown(p))return String(s||5);if(max>=5)return`${Math.max(1,(s||5)-1)}–${Math.min(10,(s||5)+1)}`;return'?';};
+  const Dot=({p})=>(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,width:54}}>
+      <div style={{width:34,height:34,borderRadius:'50%',background:opp.color,border:'2.5px solid rgba(255,255,255,0.9)',boxShadow:'0 2px 8px rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <span style={{fontSize:7,fontWeight:900,color:'rgba(255,255,255,0.95)',letterSpacing:.5}}>{p.position==='GK'?'GK':p.position}</span>
+      </div>
+      <span style={{fontSize:9,color:'#fff',fontWeight:700,textAlign:'center',lineHeight:1.2,textShadow:'0 1px 3px rgba(0,0,0,0.9)',maxWidth:54,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{(p.name||'?').trim().split(/\s+/).pop()}</span>
+    </div>
+  );
+  const Row=({players})=>(
+    <div style={{display:'flex',justifyContent:'center',gap:players.length===2?36:players.length===3?20:6,padding:'0 4px',alignItems:'center'}}>
+      {players.map(p=><Dot key={p.id} p={p}/>)}
+    </div>
+  );
   return(
     <div style={{paddingBottom:20}}>
-      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:14,marginBottom:14}}>
-        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:4}}>MW{career.matchWeek} — {isHome?'Home':'Away'}</div>
-        <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.text,letterSpacing:.5,marginBottom:10}}>{opp.name}</div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:6,marginBottom:10}}>
-          {[{label:'POS',val:oppPos||'—',col:oppPos===1?C.gold:C.text},{label:'PTS',val:oppRow?.pts??'—',col:C.gold},{label:'ATK',val:atk.toFixed(1),col:C.accent},{label:'DEF',val:def.toFixed(1),col:C.green}].map(({label,val,col})=>(
-            <div key={label} style={{background:C.surface,borderRadius:7,padding:'8px 4px',textAlign:'center'}}>
-              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:col,lineHeight:1}}>{val}</div>
-              <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1.2,marginTop:2}}>{label}</div>
-            </div>
-          ))}
-        </div>
-        {form.length>0&&<div style={{display:'flex',alignItems:'center',gap:4}}><span style={{fontSize:10,color:C.muted,marginRight:2}}>Form:</span>{form.map((r,i)=><span key={i} style={{background:r==='W'?`${C.green}22`:r==='L'?`${C.red}22`:`${C.gold}22`,color:r==='W'?C.green:r==='L'?C.red:C.gold,borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700}}>{r}</span>)}</div>}
-      </div>
-      <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Predicted Lineup — {opp.formation}</div>
-      {rows.map(({pos,players})=>(
-        <div key={pos} style={{marginBottom:10}}>
-          <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:4}}>{pos}</div>
-          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-            {players.map(p=>(
-              <div key={p.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px',display:'flex',alignItems:'center',gap:8}}>
-                <div style={{fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}>{p.name}</div>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.text}}>{sScore(p)}</div>
-              </div>
-            ))}
+      <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'14px 16px',marginBottom:12}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10,textAlign:'center'}}>MW{career.matchWeek} Prediction — {isHome?'Home':'Away'}</div>
+        <div style={{display:'flex',justifyContent:'center',alignItems:'center',gap:12}}>
+          <div style={{textAlign:'center',flex:1}}>
+            <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{myTeam?.name}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:56,lineHeight:1,color:myGoals>oppGoals?C.green:myGoals<oppGoals?C.red:C.gold}}>{myGoals}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>xG {myXg}</div>
+          </div>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:C.border,letterSpacing:4}}>vs</div>
+          <div style={{textAlign:'center',flex:1}}>
+            <div style={{fontSize:11,color:C.muted,fontWeight:600,marginBottom:4,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{opp.name}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:56,lineHeight:1,color:oppGoals>myGoals?C.green:oppGoals<myGoals?C.red:C.gold}}>{oppGoals}</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:2}}>xG {oppXg}</div>
           </div>
         </div>
-      ))}
+        {form.length>0&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:4,marginTop:10}}><span style={{fontSize:10,color:C.muted,marginRight:2}}>{opp.name} form:</span>{form.map((r,i)=><span key={i} style={{background:r==='W'?`${C.green}22`:r==='L'?`${C.red}22`:`${C.gold}22`,color:r==='W'?C.green:r==='L'?C.red:C.gold,borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700}}>{r}</span>)}</div>}
+      </div>
+      <div style={{borderRadius:10,overflow:'hidden',position:'relative',background:'#1b6530'}}>
+        <div style={{position:'absolute',inset:0,background:'repeating-linear-gradient(180deg,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 36px,rgba(0,0,0,0.07) 36px,rgba(0,0,0,0.07) 72px)',pointerEvents:'none'}}/>
+        <svg style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}} viewBox="0 0 300 240" preserveAspectRatio="none">
+          <rect x="8" y="6" width="284" height="228" fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5"/>
+          <rect x="82" y="6" width="136" height="68" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.2"/>
+          <rect x="114" y="6" width="72" height="24" fill="none" stroke="rgba(255,255,255,0.13)" strokeWidth="1"/>
+        </svg>
+        <div style={{position:'relative',zIndex:1,padding:'16px 10px 10px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,padding:'0 4px'}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}><div style={{width:10,height:10,borderRadius:2,background:opp.color,flexShrink:0}}/><span style={{fontSize:10,fontWeight:700,color:'rgba(255,255,255,0.9)',letterSpacing:.5}}>{opp.name}</span></div>
+            <span style={{fontSize:9,color:'rgba(255,255,255,0.5)',fontWeight:600,letterSpacing:1}}>{lo.formation?.label}</span>
+          </div>
+          {lo.gk&&<div style={{display:'flex',justifyContent:'center',marginBottom:22}}><Dot p={lo.gk}/></div>}
+          {lo.defs.length>0&&<div style={{marginBottom:22}}><Row players={lo.defs}/></div>}
+          {lo.mdfs.length>0&&<div style={{marginBottom:22}}><Row players={lo.mdfs}/></div>}
+          {lo.fwds.length>0&&<div style={{marginBottom:8}}><Row players={lo.fwds}/></div>}
+          <div style={{display:'flex',alignItems:'center',gap:8,marginTop:16,marginBottom:4}}>
+            <div style={{flex:1,height:1,background:'rgba(255,255,255,0.2)'}}/><span style={{fontSize:8,color:'rgba(255,255,255,0.4)',fontWeight:700,letterSpacing:2,textTransform:'uppercase'}}>midfield</span><div style={{flex:1,height:1,background:'rgba(255,255,255,0.2)'}}/>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
