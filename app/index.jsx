@@ -2799,6 +2799,7 @@ function CareerTransferView({career,onUpdate}){
   const[result,setResult]=useState(null);
   const[counterBid,setCounterBid]=useState(null);
   const[counterCashInput,setCounterCashInput]=useState('');
+  const[counterResults,setCounterResults]=useState({});
   const cpuBids=career.cpuBids||[];
 
   const resetBid=()=>{setSel(null);setBid('');setTradePlayer(null);};
@@ -2856,13 +2857,25 @@ function CareerTransferView({career,onUpdate}){
   const submitCounterBid=()=>{
     if(!counterBid)return;
     const demandCash=parseInt(counterCashInput)||0;
-    const{player,bidTeam,swapPlayer}=counterBid;
+    const{player,bidTeam,swapPlayer,counterRound=0}=counterBid;
     const myVal=playerValue(player,myTeam);
     const swapVal=swapPlayer?playerValue(swapPlayer,career.teams.find(t=>t.id===bidTeam.id)||bidTeam):0;
     const totalDemand=demandCash+swapVal;
     const pct=myVal>0?totalDemand/myVal:1;
-    if(pct<=0.85)acceptCpuBid({...counterBid,amount:demandCash});
-    // else: rejected — bid stays open so user can try again
+    // Threshold tightens each rejection: 85% → 80% → 75% → walk away
+    const threshold=Math.max(0.65,0.85-counterRound*0.05);
+    if(pct<=threshold){
+      acceptCpuBid({...counterBid,amount:demandCash});
+      setCounterResults(r=>({...r,[counterBid.id]:'accepted'}));
+    } else if(counterRound>=2){
+      // Too many pushes — CPU walks
+      removeCpuBid(counterBid);
+      setCounterResults(r=>({...r,[counterBid.id]:'walkaway'}));
+    } else {
+      // Rejected — increment counterRound on bid, keep it open
+      onUpdate({...career,cpuBids:(career.cpuBids||[]).map(b=>b.id===counterBid.id?{...b,counterRound:counterRound+1}:b)});
+      setCounterResults(r=>({...r,[counterBid.id]:'rejected'}));
+    }
     setCounterBid(null);setCounterCashInput('');
   };
 
@@ -2896,33 +2909,49 @@ function CareerTransferView({career,onUpdate}){
       {cpuBids.length>0&&(
         <div style={{background:`${C.gold}15`,border:`1px solid ${C.gold}55`,borderRadius:10,padding:12,marginBottom:12}}>
           <div style={{fontSize:10,color:C.gold,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Incoming Offers</div>
-          {cpuBids.map(b=>(
-            <div key={b.id} style={{marginBottom:8,background:C.card,borderRadius:8,overflow:'hidden'}}>
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px'}}>
-                <div style={{flex:1}}>
-                  <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <span style={{fontSize:13,fontWeight:700,color:C.text}}>{b.player.name}</span>
+          {cpuBids.map(b=>{
+            const cr=counterResults[b.id];
+            const round=b.counterRound||0;
+            const attemptsLeft=2-round;
+            return(
+              <div key={b.id} style={{marginBottom:8,background:C.card,borderRadius:8,overflow:'hidden'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px'}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{b.player.name}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:1}}>{b.bidTeam.name} offer £{b.amount}M{b.swapPlayer?` + ${b.swapPlayer.name} (${b.swapPlayer.position})`:''}</div>
                   </div>
-                  <div style={{fontSize:10,color:C.muted,marginTop:1}}>{b.bidTeam.name} offer £{b.amount}M{b.swapPlayer?` + ${b.swapPlayer.name} (${b.swapPlayer.position})`:''}</div>
+                  <Btn onClick={()=>acceptCpuBid(b)} variant="success" small>Accept</Btn>
+                  <Btn onClick={()=>{setCounterBid(b);setCounterCashInput('');setCounterResults(r=>({...r,[b.id]:null}));}} variant="secondary" small>Counter</Btn>
+                  <Btn onClick={()=>{removeCpuBid(b);if(counterBid?.id===b.id){setCounterBid(null);setCounterCashInput('');}}} variant="secondary" small>Decline</Btn>
                 </div>
-                <Btn onClick={()=>acceptCpuBid(b)} variant="success" small>Accept</Btn>
-                <Btn onClick={()=>{setCounterBid(b);setCounterCashInput('');}} variant="secondary" small>Counter</Btn>
-                <Btn onClick={()=>{removeCpuBid(b);if(counterBid?.id===b.id){setCounterBid(null);setCounterCashInput('');}}} variant="secondary" small>Decline</Btn>
+                {cr==='rejected'&&(
+                  <div style={{background:`${C.red}18`,borderTop:`1px solid ${C.red}33`,padding:'6px 10px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <span style={{fontSize:11,color:C.red,fontWeight:700}}>✕ Counter rejected — try a lower number</span>
+                    <span style={{fontSize:10,color:C.muted}}>{attemptsLeft} attempt{attemptsLeft!==1?'s':''} left</span>
+                  </div>
+                )}
+                {cr==='accepted'&&(
+                  <div style={{background:`${C.green}18`,borderTop:`1px solid ${C.green}33`,padding:'6px 10px'}}>
+                    <span style={{fontSize:11,color:C.green,fontWeight:700}}>✓ Counter accepted — deal done!</span>
+                  </div>
+                )}
+                {counterBid?.id===b.id&&(
+                  <div style={{borderTop:`1px solid ${C.border}`,padding:'8px 10px',background:C.surface}}>
+                    <div style={{fontSize:10,color:C.muted,marginBottom:6}}>
+                      How much cash do you want?{b.swapPlayer?` (${b.swapPlayer.name} stays in deal)`:''}{round>0?` — getting stricter, threshold now ${Math.round((0.85-round*0.05)*100)}%`:' — threshold 85%'}
+                    </div>
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      <span style={{fontSize:12,color:C.muted}}>£</span>
+                      <input type="number" min="0" value={counterCashInput} onChange={e=>setCounterCashInput(e.target.value)} placeholder="0" style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none'}}/>
+                      <span style={{fontSize:12,color:C.muted}}>M</span>
+                      <Btn onClick={submitCounterBid} small>Send</Btn>
+                      <Btn onClick={()=>{setCounterBid(null);setCounterCashInput('');}} variant="secondary" small>Cancel</Btn>
+                    </div>
+                  </div>
+                )}
               </div>
-              {counterBid?.id===b.id&&(
-                <div style={{borderTop:`1px solid ${C.border}`,padding:'8px 10px',background:C.surface}}>
-                  <div style={{fontSize:10,color:C.muted,marginBottom:6}}>How much cash do you want? (swap: {b.swapPlayer?.name||'none'} stays in deal)</div>
-                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                    <span style={{fontSize:12,color:C.muted}}>£</span>
-                    <input type="number" min="0" value={counterCashInput} onChange={e=>setCounterCashInput(e.target.value)} placeholder="0" style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none'}}/>
-                    <span style={{fontSize:12,color:C.muted}}>M</span>
-                    <Btn onClick={submitCounterBid} small>Send</Btn>
-                    <Btn onClick={()=>{setCounterBid(null);setCounterCashInput('');}} variant="secondary" small>Cancel</Btn>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <div style={{display:'flex',gap:6,marginBottom:12}}>
