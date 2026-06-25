@@ -912,6 +912,7 @@ function RatingsTab({teams}){
 function SquadsTab({teams,setTeams}){
   const named=teams.filter(t=>t.name&&t.players.length>0);
   const[selId,setSelId]=useState(null);
+  const[showCrests,setShowCrests]=useState(false);
   const team=teams.find(t=>t.id===selId);
   const toggle=(pid,field)=>{
     const nt=teams.map(t=>t.id!==selId?t:{...t,players:t.players.map(p=>p.id!==pid?p:{...p,[field]:!p[field],...(field==="suspended"&&!p.suspended?{injured:false}:{}),...(field==="injured"&&!p.injured?{suspended:false}:{})})});
@@ -925,10 +926,21 @@ function SquadsTab({teams,setTeams}){
   const startingCount=(gk?1:0)+Math.min(activeOut.length,5);
   return(
     <div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}>
-        {named.map(t=><button key={t.id} onClick={()=>setSelId(t.id)} style={{background:selId===t.id?t.color:C.card,color:selId===t.id?(isLight(t.color)?'#000':'#fff'):C.sub,border:`1px solid ${selId===t.id?t.color:C.border}`,borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{t.name}</button>)}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20,alignItems:"center"}}>
+        {named.map(t=><button key={t.id} onClick={()=>{setSelId(t.id);setShowCrests(false);}} style={{background:selId===t.id&&!showCrests?t.color:C.card,color:selId===t.id&&!showCrests?(isLight(t.color)?'#000':'#fff'):C.sub,border:`1px solid ${selId===t.id&&!showCrests?t.color:C.border}`,borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{t.name}</button>)}
+        <button onClick={()=>{setShowCrests(s=>!s);setSelId(null);}} style={{background:showCrests?C.accent:C.card,color:showCrests?'#fff':C.sub,border:`1px solid ${showCrests?C.accent:C.border}`,borderRadius:8,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginLeft:'auto',flexShrink:0}}>View Crests</button>
       </div>
-      {!team&&<Empty icon="👆" msg="Select a team above." hint=""/>}
+      {showCrests&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+          {named.map(t=>(
+            <div key={t.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16,display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+              <TeamBadge color={t.color} crest={t.crest} size={64}/>
+              <div style={{fontSize:12,fontWeight:700,color:C.text,textAlign:"center",lineHeight:1.3}}>{t.name}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {!showCrests&&!team&&<Empty icon="👆" msg="Select a team above." hint=""/>}
       {team&&<div>
         <div style={{marginBottom:16}}>
           <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Formation</div>
