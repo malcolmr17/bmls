@@ -2009,7 +2009,7 @@ function buildCareerLineup(team,starters,formation,moods={}){
   const getP=(pos,idx)=>{
     const s=starters.find(s=>s.slotPos===pos&&s.slotIdx===idx);if(!s)return null;
     const p=team.players.find(p=>p.id===s.playerId);if(!p||p.injured||p.suspended)return null;
-    const oop=p.position!==pos;
+    const oop=p.position!==pos&&!(p.position==='MDF'&&p.altPosition===pos);
     const mm=moodInfo(moods[p.id]??65).mult;
     const mult=oop?0.7*mm:mm;
     return{...p,score:Math.round((p.score||5)*mult),mdfAtkScore:Math.round((p.mdfAtkScore||5)*mult),mdfDefScore:Math.round((p.mdfDefScore||5)*mult),_oop:oop};
@@ -2118,6 +2118,11 @@ function playerValue(p,team){
   const ageMult=Math.max(0.6,3.2-0.067*age);
   return Math.round(ps*ps*ageMult*Math.max(0.5,1+(ts-7)*0.08));
 }
+function careerPlayerValue(p,team,mw){
+  const base=playerValue(p,team);
+  if(p.lastTradedMW!=null&&mw-p.lastTradedMW<=3)return Math.round(base*1.2);
+  return base;
+}
 function valueKnown(p){
   const s=p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
   return s>=8||(p.roles||[]).includes('captain');
@@ -2220,6 +2225,9 @@ function CareerHubView({career,onNav,onNewSeason}){
   const opp=myFix?career.teams.find(t=>t.id===(isHome?myFix.awayId:myFix.homeId)):null;
   const totalMW=career.fixtures.reduce((m,f)=>Math.max(m,f.matchWeek),0);
   const seasonDone=career.matchWeek>totalMW;
+  const starterIds=new Set((career.lineup?.starters||[]).map(s=>s.playerId));
+  const hasUnavailableStarter=(myTeam?.players||[]).some(p=>starterIds.has(p.id)&&(p.injured||p.suspended));
+  const unhappy=(myTeam?.players||[]).filter(p=>(moods[p.id]??65)<40);
   return(
     <div style={{paddingBottom:16}}>
       {seasonDone&&(
@@ -2249,10 +2257,7 @@ function CareerHubView({career,onNav,onNewSeason}){
                 {awards.map(a=>(
                   <div key={a.label} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
                     <div style={{fontSize:10,color:a.color,fontWeight:700,letterSpacing:1,width:110,flexShrink:0}}>{a.label}</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:700,color:C.text}}>{a.name||'—'}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{a.detail}</div>
-                    </div>
+                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{a.name||'—'}</div><div style={{fontSize:10,color:C.muted}}>{a.detail}</div></div>
                   </div>
                 ))}
               </div>
@@ -2263,25 +2268,30 @@ function CareerHubView({career,onNav,onNewSeason}){
       )}
       {myFix&&!myFix.played&&(
         <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:10}}>
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:12}}>Matchweek {career.matchWeek}</div>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:10}}>Matchweek {career.matchWeek}</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8,marginBottom:14}}>
             <div style={{textAlign:'right',fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:C.text,letterSpacing:.5}}>{isHome?myTeam?.name:opp?.name}</div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.border,letterSpacing:4,textAlign:'center'}}>vs</div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:C.text,letterSpacing:.5}}>{isHome?opp?.name:myTeam?.name}</div>
           </div>
+          {hasUnavailableStarter&&(
+            <div style={{background:`${C.red}18`,border:`1px solid ${C.red}44`,borderRadius:7,padding:'8px 12px',marginBottom:8,fontSize:12,color:C.red,fontWeight:600}}>
+              ⚠ Unavailable player in your starting 6 — fix lineup before playing
+            </div>
+          )}
           {(career.lineup?.starters||[]).length===0&&(
             <div style={{background:`${C.red}18`,border:`1px solid ${C.red}44`,borderRadius:7,padding:'8px 12px',marginBottom:8,fontSize:12,color:C.red,fontWeight:600,textAlign:'center'}}>Set your lineup before kick off</div>
           )}
           <div style={{display:'flex',gap:8,marginBottom:6}}>
             <Btn onClick={()=>onNav('lineup')} variant="secondary" style={{flex:1}}>Set Lineup</Btn>
-            <Btn onClick={()=>onNav('sim')} style={{flex:1,opacity:(career.lineup?.starters||[]).length===0?0.35:1,pointerEvents:(career.lineup?.starters||[]).length===0?'none':'auto'}}>▶ Play Match</Btn>
+            <Btn onClick={()=>onNav('sim')} style={{flex:1,opacity:(career.lineup?.starters||[]).length===0?0.35:1,pointerEvents:(career.lineup?.starters||[]).length===0?'none':'auto'}}>▶ Play</Btn>
           </div>
           <Btn onClick={()=>onNav('opponent')} variant="secondary" style={{width:'100%',fontSize:11}}>Scout Report</Btn>
         </div>
       )}
       {myFix&&myFix.played&&(
-        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:10}}>
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:8}}>MW {career.matchWeek-1} Result</div>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 16px',marginBottom:10}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:6}}>MW {career.matchWeek-1} Result</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8}}>
             <div style={{textAlign:'right',fontFamily:"'Bebas Neue',sans-serif",fontSize:15,color:C.text}}>{isHome?myTeam?.name:opp?.name}</div>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:38,color:C.gold,letterSpacing:3,padding:'0 8px'}}>{myFix.homeScore}–{myFix.awayScore}</div>
@@ -2289,7 +2299,7 @@ function CareerHubView({career,onNav,onNewSeason}){
           </div>
         </div>
       )}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:12}}>
         {[{label:'POS',val:myPos||'—',col:myPos===1?C.gold:C.accent},{label:'PTS',val:myRow?.pts??0,col:C.gold},{label:'W',val:myRow?.w??0,col:C.green},{label:'BUDGET',val:`£${myTeam?.careerBudget??0}M`,col:C.text}].map(({label,val,col})=>(
           <div key={label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 4px',textAlign:'center'}}>
             <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:label==='BUDGET'?16:26,color:col,lineHeight:1}}>{val}</div>
@@ -2297,37 +2307,47 @@ function CareerHubView({career,onNav,onNewSeason}){
           </div>
         ))}
       </div>
+      {unhappy.length>0&&(
+        <div onClick={()=>onNav('transfers')} style={{background:`${C.red}18`,border:`1px solid ${C.red}44`,borderRadius:8,padding:'8px 12px',marginBottom:10,cursor:'pointer',display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:7,height:7,borderRadius:'50%',background:C.red,flexShrink:0}}/>
+          <div style={{fontSize:12,color:C.sub,flex:1}}><span style={{color:C.red,fontWeight:700}}>{unhappy.length} player{unhappy.length!==1?'s':''} unhappy</span> — {unhappy.map(p=>p.name).join(', ')}</div>
+        </div>
+      )}
       {(()=>{
         const prevMW=career.matchWeek-1;
-        if(prevMW<1)return null;
-        const mwFixtures=career.fixtures.filter(f=>f.matchWeek===prevMW&&f.played);
-        if(!mwFixtures.length)return null;
+        const mwFixtures=prevMW>=1?career.fixtures.filter(f=>f.matchWeek===prevMW&&f.played):[];
+        const recentTransfers=(career.transfers||[]).filter(t=>t.cpuTrade).slice(-5).reverse();
+        if(!mwFixtures.length&&!recentTransfers.length)return null;
         return(
           <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:10}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>MW{prevMW} Results</div>
-            {mwFixtures.map(f=>{
-              const home=career.teams.find(t=>t.id===f.homeId);
-              const away=career.teams.find(t=>t.id===f.awayId);
-              const isMe=f.homeId===career.myTeamId||f.awayId===career.myTeamId;
-              return(
-                <div key={f.matchWeek+'-'+f.homeId} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,opacity:isMe?1:0.75}}>
-                  <div style={{flex:1,fontSize:12,color:isMe?C.text:C.sub,fontWeight:isMe?700:400,textAlign:'right',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{home?.shortName||home?.name||'?'}</div>
-                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:isMe?C.gold:C.muted,letterSpacing:2,minWidth:44,textAlign:'center'}}>{f.homeScore}–{f.awayScore}</div>
-                  <div style={{flex:1,fontSize:12,color:isMe?C.text:C.sub,fontWeight:isMe?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{away?.shortName||away?.name||'?'}</div>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
-      {(()=>{
-        const ps=myTeam?.players||[];
-        const unhappy=ps.filter(p=>(moods[p.id]??65)<40);
-        if(unhappy.length===0)return null;
-        return(
-          <div onClick={()=>onNav('transfers')} style={{background:`${C.red}18`,border:`1px solid ${C.red}44`,borderRadius:8,padding:'10px 12px',marginBottom:10,cursor:'pointer',display:'flex',alignItems:'center',gap:10}}>
-            <div style={{width:8,height:8,borderRadius:'50%',background:C.red,flexShrink:0}}/>
-            <div style={{flex:1,fontSize:12,color:C.sub,lineHeight:1.4}}><span style={{color:C.red,fontWeight:700}}>{unhappy.length} player{unhappy.length!==1?'s':''} unhappy</span> — {unhappy.map(p=>p.name).join(', ')} may request a transfer.</div>
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>Activity</div>
+            {mwFixtures.length>0&&(
+              <div style={{marginBottom:recentTransfers.length?10:0}}>
+                <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:6,textTransform:'uppercase'}}>MW{prevMW} Results</div>
+                {mwFixtures.map(f=>{
+                  const ht=career.teams.find(t=>t.id===f.homeId),at=career.teams.find(t=>t.id===f.awayId);
+                  if(!ht||!at)return null;
+                  const isMyMatch=f.homeId===career.myTeamId||f.awayId===career.myTeamId;
+                  return(
+                    <div key={f.id} style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:4,marginBottom:5,opacity:isMyMatch?1:0.6}}>
+                      <div style={{textAlign:'right',fontSize:11,color:C.text,fontWeight:isMyMatch?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ht.shortName||ht.name}</div>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,color:isMyMatch?C.gold:C.muted,letterSpacing:2,textAlign:'center',padding:'0 6px'}}>{f.homeScore}–{f.awayScore}</div>
+                      <div style={{fontSize:11,color:C.text,fontWeight:isMyMatch?700:400,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{at.shortName||at.name}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {recentTransfers.length>0&&(
+              <div>
+                <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:6,textTransform:'uppercase'}}>Recent Transfers</div>
+                {recentTransfers.map(t=>(
+                  <div key={t.id} style={{fontSize:11,color:C.muted,marginBottom:4,lineHeight:1.4}}>
+                    <span style={{color:C.text,fontWeight:600}}>{t.playerName}</span>{' '}{t.fromTeam} → {t.toTeam}{t.amount>0?` · £${t.amount}M`:''}{t.swapPlayerName?<span> + {t.swapPlayerName}</span>:null}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -2582,8 +2602,8 @@ function CareerSimView({career,onMatchComplete}){
         if(cpuTrade){
           const{player,seller,buyer,amount,swapPlayer}=cpuTrade;
           updated={...updated,teams:updated.teams.map(t=>{
-            if(t.id===seller.id)return{...t,careerBudget:(t.careerBudget||0)+amount,players:[...t.players.filter(p=>p.id!==player.id),{...swapPlayer,untouchable:false}]};
-            if(t.id===buyer.id)return{...t,careerBudget:(t.careerBudget||0)-amount,players:[...t.players.filter(p=>p.id!==swapPlayer.id),{...player,untouchable:false}]};
+            if(t.id===seller.id)return{...t,careerBudget:(t.careerBudget||0)+amount,players:[...t.players.filter(p=>p.id!==player.id),{...swapPlayer,untouchable:false,lastTradedMW:career.matchWeek}]};
+            if(t.id===buyer.id)return{...t,careerBudget:(t.careerBudget||0)-amount,players:[...t.players.filter(p=>p.id!==swapPlayer.id),{...player,untouchable:false,lastTradedMW:career.matchWeek}]};
             return t;
           })};
           updated={...updated,transfers:[...(updated.transfers||[]),{id:Date.now()+ti+1,playerName:player.name,fromTeam:seller.name,toTeam:buyer.name,amount,swapPlayerName:swapPlayer.name,matchWeek:career.matchWeek,cpuTrade:true}]};
@@ -2721,9 +2741,9 @@ function pickSwapOffer(bidTeam,targetVal,prefPositions){
   return{swapPlayer,amount:Math.max(0,Math.round((targetVal-swapVal)*(0.55+Math.random()*.20)))};
 }
 
-function genPreseasonBids(teams,myTeamId,myTeam){
+function genPreseasonBids(teams,myTeamId,myTeam,matchWeek=1){
   const bids=[];
-  const eligible=(myTeam?.players||[]).filter(p=>p.position!=='GK'&&!p.untouchable&&(p.score||0)>=6);
+  const eligible=(myTeam?.players||[]).filter(p=>p.position!=='GK'&&!p.untouchable&&(p.score||0)>=6&&!(p.lastTradedMW!=null&&matchWeek-p.lastTradedMW<=3));
   const others=teams.filter(t=>t.id!==myTeamId&&t.name&&t.players.length>=2);
   if(!eligible.length||!others.length)return bids;
   const n=Math.random()<0.35?3:Math.random()<0.6?2:1;
@@ -2742,7 +2762,7 @@ function genPreseasonBids(teams,myTeamId,myTeam){
 
 function maybeAddCpuBid(career,teams,myTeam){
   if(Math.random()>0.45)return null;
-  const eligible=(myTeam?.players||[]).filter(p=>p.position!=='GK'&&!p.untouchable&&(p.score||0)>=5);
+  const eligible=(myTeam?.players||[]).filter(p=>p.position!=='GK'&&!p.untouchable&&(p.score||0)>=5&&!(p.lastTradedMW!=null&&career.matchWeek-p.lastTradedMW<=3));
   const others=teams.filter(t=>t.id!==career.myTeamId&&t.name&&t.players.length>=2);
   if(!eligible.length||!others.length)return null;
   const sh=a=>[...a].sort(()=>Math.random()-.5);
@@ -2770,7 +2790,7 @@ function maybeDoCpuTrade(career,teams){
       ?(p=>p.position!=='GK'&&(p.position==='FWD'||(p.position==='MDF'&&(p.mdfAtkScore||0)>=6))&&atkScore(p)>=6)
       :(p=>p.position!=='GK'&&(p.position==='DEF'||(p.position==='MDF'&&(p.mdfDefScore||0)>=6))&&defScore(p)>=6);
     for(const seller of sh(eligible.filter(t=>t.id!==buyer.id))){
-      const targets=seller.players.filter(targetFilter).sort((a,b)=>(needsAtk?atkScore(b)-atkScore(a):defScore(b)-defScore(a)));
+      const targets=seller.players.filter(targetFilter).filter(p=>!(p.lastTradedMW!=null&&career.matchWeek-p.lastTradedMW<=3)).sort((a,b)=>(needsAtk?atkScore(b)-atkScore(a):defScore(b)-defScore(a)));
       if(!targets.length)continue;
       const player=targets[0];
       const amount=Math.round(playerValue(player,seller)*(0.80+Math.random()*.25));
@@ -2813,8 +2833,8 @@ function CareerTransferView({career,onUpdate}){
     const{_team,...cleanTarget}=target;
     const record={id:Date.now(),playerId:target.id,playerName:target.name,fromTeam:fromTeam.name,toTeam:myTeam.name,amount:cashAmt,tradePlayerName:tradeP?.name||null,matchWeek:career.matchWeek};
     const updTeams=career.teams.map(t=>{
-      if(t.id===fromTeam.id)return{...t,careerBudget:(t.careerBudget||0)+cashAmt,players:[...t.players.filter(p=>p.id!==target.id),...(tradeP?[{...tradeP,untouchable:false}]:[])]};
-      if(t.id===career.myTeamId)return{...t,careerBudget:(t.careerBudget||0)-cashAmt,players:[...t.players.filter(p=>p.id!==target.id&&(!tradeP||p.id!==tradeP.id)),cleanTarget]};
+      if(t.id===fromTeam.id)return{...t,careerBudget:(t.careerBudget||0)+cashAmt,players:[...t.players.filter(p=>p.id!==target.id),...(tradeP?[{...tradeP,untouchable:false,lastTradedMW:career.matchWeek}]:[])]};
+      if(t.id===career.myTeamId)return{...t,careerBudget:(t.careerBudget||0)-cashAmt,players:[...t.players.filter(p=>p.id!==target.id&&(!tradeP||p.id!==tradeP.id)),{...cleanTarget,lastTradedMW:career.matchWeek}]};
       return t;
     });
     onUpdate({...career,teams:updTeams,transfers:[...career.transfers,record]});
@@ -2847,8 +2867,8 @@ function CareerTransferView({career,onUpdate}){
     const{player,bidTeam,amount,swapPlayer}=b;
     const record={id:Date.now(),playerId:player.id,playerName:player.name,fromTeam:myTeam.name,toTeam:bidTeam.name,amount,tradePlayerName:swapPlayer?.name||null,matchWeek:career.matchWeek};
     const updTeams=career.teams.map(t=>{
-      if(t.id===career.myTeamId)return{...t,careerBudget:(t.careerBudget||0)+amount,players:[...t.players.filter(p=>p.id!==player.id),...(swapPlayer?[{...swapPlayer,untouchable:false}]:[])]};
-      if(t.id===bidTeam.id)return{...t,careerBudget:(t.careerBudget||0)-amount,players:[...t.players.filter(p=>!swapPlayer||p.id!==swapPlayer.id),{...player,untouchable:false}]};
+      if(t.id===career.myTeamId)return{...t,careerBudget:(t.careerBudget||0)+amount,players:[...t.players.filter(p=>p.id!==player.id),...(swapPlayer?[{...swapPlayer,untouchable:false,lastTradedMW:career.matchWeek}]:[])]};
+      if(t.id===bidTeam.id)return{...t,careerBudget:(t.careerBudget||0)-amount,players:[...t.players.filter(p=>!swapPlayer||p.id!==swapPlayer.id),{...player,untouchable:false,lastTradedMW:career.matchWeek}]};
       return t;
     });
     onUpdate({...career,teams:updTeams,transfers:[...career.transfers,record],cpuBids:(career.cpuBids||[]).filter(cb=>cb.id!==b.id)});
