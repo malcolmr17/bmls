@@ -2863,7 +2863,6 @@ function CareerTransferView({career,onUpdate}){
 
   const resetBid=()=>{setSel(null);setBid('');setTradePlayer(null);};
 
-  const windowOpen=career.matchWeek<=3;
   const otherPlayers=career.teams.filter(t=>t.id!==career.myTeamId&&t.name).flatMap(t=>t.players.map(p=>({...p,_team:t}))).filter(p=>p.position!=='GK');
   const filtered=otherPlayers.filter(p=>(posFilter==='ALL'||p.position===posFilter)&&(!search||p.name.toLowerCase().includes(search.toLowerCase())));
 
