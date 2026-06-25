@@ -1885,6 +1885,55 @@ function CreateTab({teams}){
 
 // ── Career Mode ──────────────────────────────────────────────────────────────
 
+function buildCareerLineup(team,starters,formation){
+  const form=FORMATIONS.find(f=>f.id===formation)||FORMATIONS[0];
+  const getP=(pos,idx)=>{
+    const s=starters.find(s=>s.slotPos===pos&&s.slotIdx===idx);if(!s)return null;
+    const p=team.players.find(p=>p.id===s.playerId);if(!p)return null;
+    const oop=p.position!==pos;
+    return oop?{...p,score:Math.round((p.score||5)*.7),mdfAtkScore:Math.round((p.mdfAtkScore||5)*.7),mdfDefScore:Math.round((p.mdfDefScore||5)*.7),_oop:true}:p;
+  };
+  const gk=getP('GK',0);
+  const defs=Array.from({length:form.def},(_,i)=>getP('DEF',i)).filter(Boolean);
+  const mdfs=Array.from({length:form.mdf},(_,i)=>getP('MDF',i)).filter(Boolean);
+  const fwds=Array.from({length:form.fwd},(_,i)=>getP('FWD',i)).filter(Boolean);
+  const sids=new Set([gk?.id,...defs.map(p=>p.id),...mdfs.map(p=>p.id),...fwds.map(p=>p.id)].filter(Boolean));
+  const bench=team.players.filter(p=>!p.injured&&!p.suspended&&!sids.has(p.id));
+  return{gk,defs,mdfs,fwds,formation,bench};
+}
+
+function simulateFromLineups(hl,al,hTeam,aTeam){
+  const{hxg,axg}=predictMatch(hTeam,aTeam);
+  const pois=λ=>{if(λ<=0)return 0;const L=Math.exp(-Math.min(λ,12));let k=0,p=1;do{k++;p*=Math.random();}while(p>L);return k-1;};
+  const hGoals=pois(hxg),aGoals=pois(axg);
+  const wPick=(items,wFn)=>{const ws=items.map(wFn),tot=ws.reduce((s,w)=>s+w,0);if(tot<=0)return items[Math.floor(Math.random()*items.length)];let r=Math.random()*tot;for(let i=0;i<items.length;i++){r-=ws[i];if(r<=0)return items[i];}return items[items.length-1];};
+  const scorW=p=>p.position==='FWD'?(p.score||5)*3:p.position==='MDF'?(p.mdfAtkScore||5)*1.2:p.position==='DEF'?0.4:0;
+  const astW=(p,sid)=>p.id===sid?0:p.position==='MDF'?(p.mdfAtkScore||5)*2.5:p.position==='FWD'?(p.score||5):0.3;
+  const mnt=()=>Math.floor(Math.random()*90)+1;
+  const events=[];
+  const genGoals=(n,lo,team)=>{
+    const all=[lo.gk,...lo.defs,...lo.mdfs,...lo.fwds].filter(Boolean);
+    const out=all.filter(p=>p.position!=='GK');if(!out.length)return;
+    const pen=all.find(p=>(p.roles||[]).includes('penTaker'))||[...out].filter(p=>p.position==='FWD').sort((a,b)=>(b.score||0)-(a.score||0))[0]||out[0];
+    for(let i=0;i<n;i++){
+      const isPen=Math.random()<0.15;
+      const scorer=isPen?pen:wPick(out,scorW);
+      const ac=all.filter(p=>p.id!==scorer.id);
+      const assist=Math.random()<0.78&&ac.length?wPick(ac,p=>astW(p,scorer.id)):null;
+      events.push({team,type:'goal',player:scorer,assist,minute:mnt(),isPen});
+    }
+  };
+  const genCards=(lo,team)=>[lo.gk,...lo.defs,...lo.mdfs,...lo.fwds].filter(Boolean).forEach(p=>{
+    const r=Math.random(),yc=p.position==='DEF'?0.13:p.position==='MDF'?.10:p.position==='FWD'?.07:.02;
+    if(r<.025)events.push({team,type:'red',player:p,minute:mnt()});
+    else if(r<yc)events.push({team,type:'yellow',player:p,minute:mnt()});
+  });
+  genGoals(hGoals,hl,'home');genGoals(aGoals,al,'away');
+  genCards(hl,'home');genCards(al,'away');
+  events.sort((a,b)=>a.minute-b.minute);
+  return{hGoals,aGoals,events};
+}
+
 const CAREER_KEY='bmls_career';
 const loadCareer=()=>{try{return JSON.parse(localStorage.getItem(CAREER_KEY));}catch{return null;}};
 const saveCareer=c=>localStorage.setItem(CAREER_KEY,JSON.stringify(c));
@@ -2037,6 +2086,226 @@ function CareerTableView({career}){
   );
 }
 
+function CareerLineupView({career,onSave}){
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
+  const[lineup,setLineup]=useState(career.lineup||{formation:myTeam?.formation||'2-2-1',starters:[]});
+  const[selSlot,setSelSlot]=useState(null);
+  const form=FORMATIONS.find(f=>f.id===lineup.formation)||FORMATIONS[0];
+  const rows=[{pos:'FWD',n:form.fwd},{pos:'MDF',n:form.mdf},{pos:'DEF',n:form.def},{pos:'GK',n:1}].filter(r=>r.n>0);
+  const totalSlots=1+form.def+form.mdf+form.fwd;
+  const starterIds=new Set(lineup.starters.map(s=>s.playerId));
+  const available=(myTeam?.players||[]).filter(p=>!p.injured&&!p.suspended);
+  const bench=available.filter(p=>!starterIds.has(p.id));
+  const getStarter=(pos,idx)=>{const s=lineup.starters.find(s=>s.slotPos===pos&&s.slotIdx===idx);return s?myTeam?.players.find(p=>p.id===s.playerId):null;};
+  const assign=(pos,idx,pid)=>{
+    const others=lineup.starters.filter(s=>!(s.slotPos===pos&&s.slotIdx===idx)&&s.playerId!==pid);
+    setLineup(l=>({...l,starters:[...others,{slotPos:pos,slotIdx:idx,playerId:pid}]}));setSelSlot(null);
+  };
+  const remove=(pos,idx)=>{setLineup(l=>({...l,starters:l.starters.filter(s=>!(s.slotPos===pos&&s.slotIdx===idx))}));setSelSlot(null);};
+  const slotGap=n=>n===1?0:n===2?56:n===3?26:16;
+  return(
+    <div style={{paddingBottom:20}}>
+      <div style={{background:C.card,borderRadius:10,padding:14,marginBottom:10,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Formation</div>
+        <div style={{display:'flex',gap:6}}>
+          {FORMATIONS.map(f=>{const on=lineup.formation===f.id;return(
+            <button key={f.id} onClick={()=>{setLineup(l=>({...l,formation:f.id,starters:[]}));setSelSlot(null);}} style={{flex:1,padding:'10px 4px',borderRadius:8,cursor:'pointer',fontFamily:"'Bebas Neue',sans-serif",fontSize:18,letterSpacing:1,background:on?`${C.accent}22`:'transparent',color:on?C.accent:C.muted,border:`1px solid ${on?C.accent:C.border}`}}>{f.label}</button>
+          );})}
+        </div>
+      </div>
+      <div style={{background:'#1b6530',borderRadius:selSlot?'10px 10px 0 0':10,overflow:'hidden',marginBottom:selSlot?0:10}}>
+        <div style={{padding:'18px 8px 10px',position:'relative'}}>
+          <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:72,height:72,borderRadius:'50%',border:'1px solid rgba(255,255,255,0.12)',pointerEvents:'none'}}/>
+          <div style={{position:'absolute',top:'50%',left:0,right:0,height:1,background:'rgba(255,255,255,0.09)',pointerEvents:'none'}}/>
+          <div style={{display:'flex',flexDirection:'column',gap:20,position:'relative'}}>
+            {rows.map(({pos,n})=>(
+              <div key={pos} style={{display:'flex',justifyContent:'center',gap:slotGap(n),alignItems:'center'}}>
+                {Array.from({length:n},(_,idx)=>{
+                  const pl=getStarter(pos,idx);const active=selSlot?.pos===pos&&selSlot?.idx===idx;
+                  const oop=pl&&pl.position!==pos;
+                  return(
+                    <div key={idx} onClick={()=>active?setSelSlot(null):setSelSlot({pos,idx})} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,cursor:'pointer'}}>
+                      <div style={{width:42,height:42,borderRadius:'50%',position:'relative',background:active?(myTeam?.color||C.accent):pl?(pl.teamColor||myTeam?.color||C.accent):(myTeam?.color||C.accent)+'55',border:`2.5px solid ${active?'#fff':pl?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.3)'}`,boxShadow:active?'0 0 0 3px rgba(255,255,255,0.3),0 2px 8px rgba(0,0,0,0.5)':'0 2px 6px rgba(0,0,0,0.4)',display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
+                        <span style={{fontSize:7.5,fontWeight:900,color:active||pl?'rgba(255,255,255,0.95)':'rgba(255,255,255,0.45)',letterSpacing:.5}}>{pl?pl.position:pos}</span>
+                        {oop&&<div style={{position:'absolute',top:-3,right:-3,width:13,height:13,borderRadius:'50%',background:C.gold,fontSize:7,fontWeight:900,color:'#000',display:'flex',alignItems:'center',justifyContent:'center',zIndex:2}}>!</div>}
+                      </div>
+                      <span style={{fontSize:9,color:pl?'#fff':'rgba(255,255,255,0.4)',fontWeight:700,textAlign:'center',lineHeight:1.2,textShadow:'0 1px 3px rgba(0,0,0,0.9)',maxWidth:54,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{pl?.name?.trim().split(/\s+/).pop()||'+'}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div style={{textAlign:'center',fontSize:9,color:'rgba(255,255,255,0.28)',marginTop:12,letterSpacing:1}}>{lineup.starters.length}/{totalSlots} selected</div>
+        </div>
+      </div>
+      {selSlot&&(
+        <div style={{background:C.card,border:`1px solid ${C.accent}`,borderTop:'none',borderRadius:'0 0 10px 10px',padding:12,marginBottom:10}}>
+          <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
+            <div style={{fontSize:10,color:C.accent,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',flex:1}}>{selSlot.pos} slot — pick player</div>
+            <button onClick={()=>setSelSlot(null)} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:18,padding:'0 2px'}}>✕</button>
+          </div>
+          <div style={{maxHeight:210,overflowY:'auto'}}>
+            {available.map(p=>{
+              const inOtherSlot=starterIds.has(p.id)&&!lineup.starters.find(s=>s.slotPos===selSlot.pos&&s.slotIdx===selSlot.idx&&s.playerId===p.id);
+              const oop=p.position!==selSlot.pos;
+              return(
+                <div key={p.id} onClick={()=>assign(selSlot.pos,selSlot.idx,p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 6px',borderRadius:7,cursor:'pointer',marginBottom:2,opacity:inOtherSlot?.5:1,background:getStarter(selSlot.pos,selSlot.idx)?.id===p.id?`${C.accent}22`:'transparent'}}>
+                  <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}{oop&&<span style={{fontSize:9,color:C.gold,marginLeft:6}}>OOP ×0.7</span>}{inOtherSlot&&<span style={{fontSize:9,color:C.muted,marginLeft:6}}>in lineup</span>}</div>
+                  </div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.text,minWidth:20,textAlign:'right'}}>{p.position==='GK'?'—':p.position==='MDF'?p.mdfAtkScore:p.score}</div>
+                </div>
+              );
+            })}
+          </div>
+          {getStarter(selSlot.pos,selSlot.idx)&&<button onClick={()=>remove(selSlot.pos,selSlot.idx)} style={{marginTop:8,background:'none',border:'none',color:C.red,fontSize:11,cursor:'pointer',fontFamily:"'DM Sans',sans-serif",padding:'4px 0',display:'block'}}>✕ Remove from slot</button>}
+        </div>
+      )}
+      {bench.length>0&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:12,marginBottom:10}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:8}}>Bench</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+            {bench.map(p=><div key={p.id} style={{background:C.surface,borderRadius:6,padding:'4px 8px',fontSize:11,color:C.sub,fontWeight:600}}><span style={{color:posColor(p.position),marginRight:4}}>{p.position}</span>{p.name?.split(/\s+/).pop()}</div>)}
+          </div>
+        </div>
+      )}
+      <Btn onClick={()=>onSave(lineup)} variant="success" style={{width:'100%',padding:'12px'}}>Save Lineup ✓</Btn>
+    </div>
+  );
+}
+
+function CareerSimView({career,onMatchComplete}){
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
+  const myFix=career.fixtures.find(f=>f.matchWeek===career.matchWeek&&(f.homeId===career.myTeamId||f.awayId===career.myTeamId));
+  const isHome=myFix?.homeId===career.myTeamId;
+  const oppTeam=myFix?career.teams.find(t=>t.id===(isHome?myFix.awayId:myFix.homeId)):null;
+  const[simData,setSimData]=useState(null);
+  const[minute,setMinute]=useState(0);
+  const[shown,setShown]=useState([]);
+  const[score,setScore]=useState({h:0,a:0});
+  const[speed,setSpeed]=useState(1);
+  const[running,setRunning]=useState(false);
+  const[done,setDone]=useState(false);
+  const iRef=useRef(null);
+  const feedRef=useRef(null);
+  const hName=isHome?myTeam?.name:oppTeam?.name;
+  const aName=isHome?oppTeam?.name:myTeam?.name;
+
+  const kick=()=>{
+    if(!myFix||!oppTeam)return;
+    const myLo=buildCareerLineup(myTeam,career.lineup?.starters||[],career.lineup?.formation||myTeam.formation);
+    const oppLo=predictedLineup(oppTeam,career.fixtures);
+    const r=isHome?simulateFromLineups(myLo,oppLo,myTeam,oppTeam):simulateFromLineups(oppLo,myLo,oppTeam,myTeam);
+    setSimData(r);setMinute(0);setShown([]);setScore({h:0,a:0});setDone(false);setRunning(true);
+  };
+  const reset=()=>{setSimData(null);setMinute(0);setShown([]);setScore({h:0,a:0});setDone(false);setRunning(false);};
+
+  useEffect(()=>{
+    if(!running||!simData)return;
+    clearInterval(iRef.current);
+    iRef.current=setInterval(()=>setMinute(m=>m<90?m+1:90),1000/speed);
+    return()=>clearInterval(iRef.current);
+  },[running,speed,simData]);
+
+  useEffect(()=>{
+    if(!simData||minute===0)return;
+    const now=simData.events.filter(e=>e.minute===minute);
+    if(now.length){
+      setShown(p=>[...p,...now]);
+      const goals=now.filter(e=>e.type==='goal');
+      if(goals.length)setScore(s=>{let h=s.h,a=s.a;goals.forEach(e=>{if(e.team==='home')h++;else a++;});return{h,a};});
+    }
+    if(minute>=90){clearInterval(iRef.current);setRunning(false);setDone(true);}
+  },[minute]);
+
+  useEffect(()=>{if(feedRef.current)feedRef.current.scrollTop=feedRef.current.scrollHeight;},[shown]);
+
+  const apply=()=>{
+    if(!simData||!myFix)return;
+    const stats={};
+    const upd=(pid,f,v)=>{if(!stats[pid])stats[pid]={goals:0,penGoals:0,assists:0,yellowCards:0,redCards:0,cleanSheets:0};stats[pid][f]=typeof v==='boolean'?(stats[pid][f]||0)+(v?1:0):(stats[pid][f]||0)+v;};
+    simData.events.forEach(e=>{
+      if(e.type==='goal'){upd(e.player.id,'goals',1);if(e.isPen)upd(e.player.id,'penGoals',1);if(e.assist)upd(e.assist.id,'assists',1);}
+      else if(e.type==='yellow')upd(e.player.id,'yellowCards',1);
+      else if(e.type==='red')upd(e.player.id,'redCards',1);
+    });
+    const hT=isHome?myTeam:oppTeam,aT=isHome?oppTeam:myTeam;
+    if(simData.aGoals===0){const gk=hT.players.find(p=>p.position==='GK');if(gk)upd(gk.id,'cleanSheets',1);}
+    if(simData.hGoals===0){const gk=aT.players.find(p=>p.position==='GK');if(gk)upd(gk.id,'cleanSheets',1);}
+    let updated={...career,fixtures:career.fixtures.map(f=>f.id===myFix.id?{...f,played:true,homeScore:simData.hGoals,awayScore:simData.aGoals}:f)};
+    // CPU vs CPU
+    const cpuFixes=updated.fixtures.filter(f=>f.matchWeek===career.matchWeek&&f.id!==myFix.id&&!f.played);
+    cpuFixes.forEach(f=>{
+      const ht=updated.teams.find(t=>t.id===f.homeId),at=updated.teams.find(t=>t.id===f.awayId);
+      if(!ht||!at)return;
+      const r=simulateFromLineups(predictedLineup(ht,updated.fixtures),predictedLineup(at,updated.fixtures),ht,at);
+      r.events.forEach(e=>{
+        if(e.type==='goal'){upd(e.player.id,'goals',1);if(e.isPen)upd(e.player.id,'penGoals',1);if(e.assist)upd(e.assist.id,'assists',1);}
+        else if(e.type==='yellow')upd(e.player.id,'yellowCards',1);
+        else if(e.type==='red')upd(e.player.id,'redCards',1);
+      });
+      if(r.aGoals===0){const gk=ht.players.find(p=>p.position==='GK');if(gk)upd(gk.id,'cleanSheets',1);}
+      if(r.hGoals===0){const gk=at.players.find(p=>p.position==='GK');if(gk)upd(gk.id,'cleanSheets',1);}
+      updated={...updated,fixtures:updated.fixtures.map(x=>x.id===f.id?{...x,played:true,homeScore:r.hGoals,awayScore:r.aGoals}:x)};
+    });
+    // Merge stats
+    const merged={...career.playerStats};
+    Object.entries(stats).forEach(([pid,s])=>{
+      if(!merged[pid])merged[pid]={goals:0,penGoals:0,assists:0,yellowCards:0,redCards:0,cleanSheets:0};
+      Object.keys(s).forEach(k=>merged[pid][k]=(merged[pid][k]||0)+s[k]);
+    });
+    onMatchComplete({...updated,playerStats:merged,matchWeek:career.matchWeek+1,phase:'lineup'});
+  };
+
+  const ico=t=>t==='goal'?'⚽':t==='yellow'?'🟡':'🟥';
+  if(!myFix||myFix.played)return<div style={{color:C.muted,textAlign:'center',paddingTop:40,fontSize:13}}>{myFix?.played?'Already played — check Hub.':'No fixture this matchweek.'}</div>;
+
+  return(
+    <div style={{paddingBottom:20}}>
+      {!simData?(
+        <div style={{textAlign:'center',paddingTop:32}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8,marginBottom:28}}>
+            <div style={{textAlign:'right',fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:isHome?C.text:C.muted,letterSpacing:.5}}>{hName}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:28,color:C.border,letterSpacing:4}}>vs</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:!isHome?C.text:C.muted,letterSpacing:.5}}>{aName}</div>
+          </div>
+          <Btn onClick={kick} style={{padding:'14px 44px',fontSize:16}}>▶ Kick Off</Btn>
+        </div>
+      ):(
+        <div>
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'14px 16px',marginBottom:8}}>
+            <div style={{textAlign:'center',fontSize:11,fontWeight:700,color:done?C.green:running?C.red:C.muted,letterSpacing:2,marginBottom:6}}>{done?'FULL TIME':minute===45?'HALF TIME':running?`${minute}'`:'—'}</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8}}>
+              <div style={{textAlign:'right',fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:C.text}}>{hName}</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:52,color:C.gold,letterSpacing:4,textAlign:'center',lineHeight:1,padding:'0 10px'}}>{score.h}–{score.a}</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:C.text}}>{aName}</div>
+            </div>
+          </div>
+          {running&&<div style={{height:3,background:C.surface,borderRadius:2,marginBottom:8,overflow:'hidden'}}><div style={{height:'100%',background:C.accent,width:`${(minute/90)*100}%`,transition:'width 0.9s linear'}}/></div>}
+          {running&&<div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center'}}>{[1,2,5].map(s=><button key={s} onClick={()=>setSpeed(s)} style={{background:speed===s?`${C.accent}22`:'transparent',color:speed===s?C.accent:C.muted,border:`1px solid ${speed===s?C.accent:C.border}`,borderRadius:5,padding:'4px 12px',fontSize:11,fontWeight:700,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>{s}×</button>)}</div>}
+          <div ref={feedRef} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:12,marginBottom:10,minHeight:120,maxHeight:260,overflowY:'auto'}}>
+            {shown.length===0?<div style={{fontSize:11,color:C.muted,textAlign:'center',fontStyle:'italic',padding:'24px 0'}}>Waiting for kick off…</div>:shown.map((e,i)=>{
+              const isH=e.team==='home';
+              const main=e.type==='goal'?`${e.player.name}${e.isPen?' (pen)':''}`:`${e.player.name}`;
+              const ast=e.assist?`↗ ${e.assist.name}`:'';
+              return(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 34px 1fr',gap:2,marginBottom:6,alignItems:'start'}}>
+                  {isH?<div style={{textAlign:'right',paddingRight:4}}><div style={{fontSize:12,color:C.text,fontWeight:600}}>{main} {ico(e.type)}</div>{ast&&<div style={{fontSize:10,color:C.muted}}>{ast}</div>}</div>:<div/>}
+                  <div style={{textAlign:'center',fontSize:10,color:C.muted,fontWeight:700,paddingTop:2}}>{e.minute}'</div>
+                  {!isH?<div style={{paddingLeft:4}}><div style={{fontSize:12,color:C.text,fontWeight:600}}>{ico(e.type)} {main}</div>{ast&&<div style={{fontSize:10,color:C.muted,paddingLeft:14}}>{ast}</div>}</div>:<div/>}
+                </div>
+              );
+            })}
+          </div>
+          {done&&<div style={{display:'flex',gap:8}}><Btn onClick={reset} variant="secondary" style={{flex:1}}>Re-simulate</Btn><Btn onClick={apply} variant="success" style={{flex:1}}>Accept Result ✓</Btn></div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CAREER_VIEWS=[{id:'hub',label:'Hub'},{id:'lineup',label:'Lineup'},{id:'sim',label:'Match'},{id:'transfers',label:'Transfers'},{id:'table',label:'Table'},{id:'stats',label:'Stats'},{id:'news',label:'News'}];
 
 function CareerTab({teams}){
@@ -2063,8 +2332,8 @@ function CareerTab({teams}){
       <div style={{padding:16,paddingBottom:40}}>
         {view==='hub'      &&<CareerHubView career={career} onNav={setView}/>}
         {view==='table'    &&<CareerTableView career={career}/>}
-        {view==='lineup'   &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Lineup builder — coming next</div>}
-        {view==='sim'      &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Live match sim — coming next</div>}
+        {view==='lineup'   &&<CareerLineupView career={career} onSave={lineup=>{update({...career,lineup});setView('hub');}}/>}
+        {view==='sim'      &&<CareerSimView career={career} onMatchComplete={c=>{update(c);setView('hub');}}/>}
         {view==='transfers'&&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Transfer market — coming next</div>}
         {view==='stats'    &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Stats — coming next</div>}
         {view==='news'     &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Career news — coming next</div>}
