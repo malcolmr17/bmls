@@ -2775,10 +2775,13 @@ function CareerStatsView({career}){
 }
 
 function pickSwapOffer(bidTeam,targetVal,prefPositions){
-  const cands=bidTeam.players.filter(p=>p.position!=='GK'&&playerValue(p,bidTeam)<targetVal);
-  if(!cands.length)return{swapPlayer:null,amount:Math.round(targetVal*(0.55+Math.random()*.20))};
-  const pref=cands.filter(p=>prefPositions.includes(p.position)).sort((a,b)=>playerValue(b,bidTeam)-playerValue(a,bidTeam));
-  const any=[...cands].sort((a,b)=>playerValue(b,bidTeam)-playerValue(a,bidTeam));
+  const outfield=bidTeam.players.filter(p=>p.position!=='GK');
+  if(!outfield.length)return{swapPlayer:null,amount:Math.round(targetVal*(0.55+Math.random()*.20))};
+  const cands=outfield.filter(p=>playerValue(p,bidTeam)<targetVal);
+  // Always include a swap player; fall back to cheapest outfield if none is cheaper than target
+  const pool=cands.length>0?cands:outfield;
+  const pref=pool.filter(p=>prefPositions.includes(p.position)).sort((a,b)=>playerValue(b,bidTeam)-playerValue(a,bidTeam));
+  const any=[...pool].sort((a,b)=>playerValue(b,bidTeam)-playerValue(a,bidTeam));
   const swapPlayer=pref.length>0?pref[0]:any[0];
   const swapVal=playerValue(swapPlayer,bidTeam);
   return{swapPlayer,amount:Math.max(0,Math.round((targetVal-swapVal)*(0.55+Math.random()*.20)))};
