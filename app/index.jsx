@@ -1169,6 +1169,10 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
                   );})}
                 </div>
               </div>
+              <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:10,color:C.muted,flex:1}}>Transfer Value (£M)</span>
+                <input type="number" min="1" max="9999" value={p.value??''} onChange={e=>updPlayer(editTeam,p.id,'value',e.target.value===''?null:+e.target.value)} placeholder="Auto" style={{width:80,background:C.card,border:`1px solid ${p.value!=null?C.accent:C.border}`,borderRadius:6,padding:'5px 8px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",outline:'none',textAlign:'center'}}/>
+              </div>
             </div>
           ))}
           <div style={{display:"flex",gap:8,marginTop:4}}>
@@ -2057,6 +2061,7 @@ const loadCareer=()=>{try{return JSON.parse(localStorage.getItem(CAREER_KEY));}c
 const saveCareer=c=>localStorage.setItem(CAREER_KEY,JSON.stringify(c));
 
 function playerValue(p,team){
+  if(p.value!=null)return p.value;
   const{atk,def}=lineupRatings(team);
   const ps=p.position==='GK'?7:p.position==='MDF'?(p.mdfAtkScore+p.mdfDefScore)/2:(p.score||5);
   const ts=(p.position==='FWD'||p.position==='MDF')?atk:def;
