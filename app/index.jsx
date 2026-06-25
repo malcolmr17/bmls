@@ -2694,7 +2694,7 @@ function CareerTransferView({career,onUpdate}){
               const tradeVal=tradePlayer?playerValue(tradePlayer,myTeam):0;
               const totalOffer=cashAmt+tradeVal;
               const targetVal=playerValue(p,p._team);
-              const canSubmit=cashAmt>0||!!tradePlayer;
+              const canSubmit=!!tradePlayer;
               return(
                 <div key={p.id}>
                   <div onClick={()=>{setSel(isSel?null:p);setBid('');setTradePlayer(null);setResult(null);}} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:isSel?`${C.accent}15`:C.card,border:`1px solid ${isSel?C.accent:C.border}`,borderRadius:isSel?'8px 8px 0 0':8,marginBottom:isSel?0:6,cursor:'pointer'}}>
@@ -2716,8 +2716,8 @@ function CareerTransferView({career,onUpdate}){
                       </div>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
                         <span style={{fontSize:10,color:C.muted,flexShrink:0,width:52}}>Include</span>
-                        <select value={tradePlayer?.id||''} onChange={e=>{const found=(myTeam?.players||[]).find(mp=>mp.id===e.target.value);setTradePlayer(found||null);}} style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:tradePlayer?C.text:C.muted,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:'none'}}>
-                          <option value=''>No player</option>
+                        <select value={tradePlayer?.id||''} onChange={e=>{const found=(myTeam?.players||[]).find(mp=>String(mp.id)===e.target.value);setTradePlayer(found||null);}} style={{flex:1,background:C.card,border:`1px solid ${C.border}`,borderRadius:6,padding:'6px 8px',color:tradePlayer?C.text:C.muted,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:'none'}}>
+                          <option value=''>Select a player (required)</option>
                           {(myTeam?.players||[]).map(mp=><option key={mp.id} value={mp.id}>{mp.name} ({mp.position}) — £{playerValue(mp,myTeam)}M</option>)}
                         </select>
                       </div>
