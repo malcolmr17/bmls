@@ -1883,6 +1883,196 @@ function CreateTab({teams}){
   );
 }
 
+// ── Career Mode ──────────────────────────────────────────────────────────────
+
+const CAREER_KEY='bmls_career';
+const loadCareer=()=>{try{return JSON.parse(localStorage.getItem(CAREER_KEY));}catch{return null;}};
+const saveCareer=c=>localStorage.setItem(CAREER_KEY,JSON.stringify(c));
+
+function playerValue(p,team){
+  const{atk,def}=lineupRatings(team);
+  const ps=p.position==='GK'?7:p.position==='MDF'?(p.mdfAtkScore+p.mdfDefScore)/2:(p.score||5);
+  const ts=(p.position==='FWD'||p.position==='MDF')?atk:def;
+  return Math.round(ps*ps*Math.max(0.5,1+(ts-7)*0.08));
+}
+function valueKnown(p){
+  const s=p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
+  return s>=8||(p.roles||[]).includes('captain');
+}
+
+function generateCareerFixtures(teamIds){
+  const ids=[...teamIds];if(ids.length%2!==0)ids.push(-1);
+  const n=ids.length,rounds=n-1,half=n/2;
+  const fixtures=[],rot=[...ids];
+  for(let r=0;r<rounds;r++){
+    for(let m=0;m<half;m++){
+      const h=rot[m],a=rot[n-1-m];
+      if(h!==-1&&a!==-1)fixtures.push({id:`career-${r+1}-${m}`,homeId:h,awayId:a,matchWeek:r+1,played:false,homeScore:null,awayScore:null,playerStats:[]});
+    }
+    rot.splice(1,0,rot.pop());
+  }
+  return fixtures;
+}
+
+function createCareer(myTeamId,allTeams){
+  const teams=allTeams.map(t=>({...t,careerBudget:t.budget||100,players:t.players.map(p=>({...p,untouchable:false}))}));
+  const active=teams.filter(t=>t.name&&t.players.length>0);
+  return{myTeamId,matchWeek:1,phase:'lineup',teams,fixtures:generateCareerFixtures(active.map(t=>t.id)),playerStats:{},transfers:[],lineup:{formation:teams.find(t=>t.id===myTeamId)?.formation||'2-2-1',starters:[]},createdAt:Date.now()};
+}
+
+function CareerSetupView({teams,onStart}){
+  const[sel,setSel]=useState(null);
+  const team=teams.find(t=>t.id===sel);
+  return(
+    <div style={{padding:16,paddingBottom:40}}>
+      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:34,color:C.text,letterSpacing:2,marginBottom:4,lineHeight:1}}>Career Mode</div>
+      <div style={{fontSize:13,color:C.muted,marginBottom:24}}>Pick a club and take them to the top of the BMLS.</div>
+      <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:10}}>Choose Your Club</div>
+      {teams.filter(t=>t.name).map(t=>{
+        const r=lineupRatings(t);
+        return(
+          <div key={t.id} onClick={()=>setSel(t.id)} style={{background:sel===t.id?`${t.color}22`:C.card,border:`1px solid ${sel===t.id?t.color:C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:12,cursor:'pointer'}}>
+            <TeamBadge color={t.color} crest={t.crest} size={36}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:700,color:C.text}}>{t.name}</div>
+              <div style={{fontSize:11,color:C.muted,marginTop:2}}>{t.formation} · ATK {r.atk.toFixed(1)} · DEF {r.def.toFixed(1)} · Budget £{t.budget||0}M</div>
+            </div>
+            {sel===t.id&&<div style={{color:t.color,fontSize:22,fontWeight:900,flexShrink:0}}>✓</div>}
+          </div>
+        );
+      })}
+      {team&&<div style={{marginTop:16,position:'sticky',bottom:16}}><Btn onClick={()=>onStart(team.id)} variant="success" style={{width:'100%',padding:'13px 16px',fontSize:15}}>Start Career with {team.shortName||team.name} →</Btn></div>}
+    </div>
+  );
+}
+
+function CareerHubView({career,onNav}){
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
+  const played=useMemo(()=>career.fixtures.filter(f=>f.played),[career.fixtures]);
+  const table=useMemo(()=>computeTable(career.teams,played),[career.teams,played]);
+  const myRow=table.find(r=>r.id===career.myTeamId);
+  const myPos=table.findIndex(r=>r.id===career.myTeamId)+1;
+  const myFix=career.fixtures.find(f=>f.matchWeek===career.matchWeek&&(f.homeId===career.myTeamId||f.awayId===career.myTeamId));
+  const isHome=myFix?.homeId===career.myTeamId;
+  const opp=myFix?career.teams.find(t=>t.id===(isHome?myFix.awayId:myFix.homeId)):null;
+  const totalMW=career.fixtures.reduce((m,f)=>Math.max(m,f.matchWeek),0);
+  const seasonDone=career.matchWeek>totalMW;
+  return(
+    <div style={{paddingBottom:16}}>
+      {seasonDone&&(
+        <div style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:10,padding:16,marginBottom:12,textAlign:'center'}}>
+          <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,color:C.gold,letterSpacing:2}}>Season Complete</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:4}}>Final position: {myPos}{myPos===1?' 🏆':myPos<=3?' 🥉':''}</div>
+        </div>
+      )}
+      {myFix&&!myFix.played&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:10}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:12}}>Matchweek {career.matchWeek}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8,marginBottom:14}}>
+            <div style={{textAlign:'right',fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:C.text,letterSpacing:.5}}>{isHome?myTeam?.name:opp?.name}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.border,letterSpacing:4,textAlign:'center'}}>vs</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:C.text,letterSpacing:.5}}>{isHome?opp?.name:myTeam?.name}</div>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <Btn onClick={()=>onNav('lineup')} variant="secondary" style={{flex:1}}>Set Lineup</Btn>
+            <Btn onClick={()=>onNav('sim')} style={{flex:1}}>▶ Play Match</Btn>
+          </div>
+        </div>
+      )}
+      {myFix&&myFix.played&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:10}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:8}}>MW {career.matchWeek-1} Result</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:8}}>
+            <div style={{textAlign:'right',fontFamily:"'Bebas Neue',sans-serif",fontSize:15,color:C.text}}>{isHome?myTeam?.name:opp?.name}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:38,color:C.gold,letterSpacing:3,padding:'0 8px'}}>{myFix.homeScore}–{myFix.awayScore}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,color:C.text}}>{isHome?opp?.name:myTeam?.name}</div>
+          </div>
+        </div>
+      )}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}}>
+        {[{label:'POS',val:myPos||'—',col:myPos===1?C.gold:C.accent},{label:'PTS',val:myRow?.pts??0,col:C.gold},{label:'W',val:myRow?.w??0,col:C.green},{label:'BUDGET',val:`£${myTeam?.careerBudget??0}M`,col:C.text}].map(({label,val,col})=>(
+          <div key={label} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 4px',textAlign:'center'}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:label==='BUDGET'?16:26,color:col,lineHeight:1}}>{val}</div>
+            <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1.2,marginTop:3}}>{label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+        {[{id:'table',label:'📊 Table'},{id:'transfers',label:'💰 Transfers'},{id:'stats',label:'⚽ Stats'},{id:'news',label:'📰 News'}].map(item=>(
+          <button key={item.id} onClick={()=>onNav(item.id)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'12px 10px',cursor:'pointer',color:C.text,fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",textAlign:'left'}}>{item.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CareerTableView({career}){
+  const played=useMemo(()=>career.fixtures.filter(f=>f.played),[career.fixtures]);
+  const table=useMemo(()=>computeTable(career.teams,played),[career.teams,played]);
+  return(
+    <div>
+      <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:12}}>League Table</div>
+      <div style={{overflowX:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse'}}>
+          <thead><tr style={{borderBottom:`1px solid ${C.border}`}}>
+            {['#','Team','P','W','D','L','GD','Pts'].map(h=><th key={h} style={{padding:'8px 6px',fontSize:10,fontWeight:700,letterSpacing:1.5,color:C.muted,textAlign:h==='Team'?'left':'center',textTransform:'uppercase',whiteSpace:'nowrap'}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {table.map((row,i)=>{
+              const gd=row.gf-row.ga,isTop=i<3,isBot=i>=table.length-3,isMe=row.id===career.myTeamId;
+              return(
+                <tr key={row.id} style={{borderBottom:`1px solid ${C.border}22`,background:isMe?`${row.color}18`:'transparent'}}>
+                  <td style={{padding:'11px 6px',textAlign:'center'}}><span style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:22,height:22,borderRadius:4,background:isTop?C.accent:isBot?`${C.red}22`:'transparent',color:isTop?C.white:isBot?C.red:C.muted,fontSize:11,fontWeight:700}}>{i+1}</span></td>
+                  <td style={{padding:'11px 6px'}}><div style={{display:'flex',alignItems:'center',gap:8}}><TeamBadge color={row.color} crest={row.crest} size={20}/><div style={{fontSize:13,fontWeight:isMe?700:500,color:C.text}}>{row.shortName||row.name}{isMe&&<span style={{fontSize:10,color:C.accent,marginLeft:5}}>▶</span>}</div></div></td>
+                  {[row.p,row.w,row.d,row.l].map((v,j)=><td key={j} style={{padding:'11px 6px',textAlign:'center',fontSize:12,color:C.sub}}>{v}</td>)}
+                  <td style={{padding:'11px 6px',textAlign:'center',fontSize:12,fontWeight:700,color:gd>0?C.green:gd<0?C.red:C.sub}}>{gd>0?`+${gd}`:gd}</td>
+                  <td style={{padding:'11px 6px',textAlign:'center'}}><span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:isTop?C.gold:C.text}}>{row.pts}</span></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+const CAREER_VIEWS=[{id:'hub',label:'Hub'},{id:'lineup',label:'Lineup'},{id:'sim',label:'Match'},{id:'transfers',label:'Transfers'},{id:'table',label:'Table'},{id:'stats',label:'Stats'},{id:'news',label:'News'}];
+
+function CareerTab({teams}){
+  const[career,setCareer]=useState(()=>loadCareer());
+  const[view,setView]=useState('hub');
+  const update=c=>{saveCareer(c);setCareer(c);};
+  if(!career){return<CareerSetupView teams={teams} onStart={id=>{update(createCareer(id,teams));setView('hub');}}/>;}
+  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
+  return(
+    <div>
+      <div style={{background:C.card,borderBottom:`1px solid ${C.border}`,padding:'10px 16px 0'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+          <TeamBadge color={myTeam?.color} crest={myTeam?.crest} size={28}/>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:17,color:C.text,letterSpacing:1,lineHeight:1}}>{myTeam?.name}</div>
+            <div style={{fontSize:10,color:C.muted}}>Matchweek {career.matchWeek} · £{myTeam?.careerBudget??0}M</div>
+          </div>
+          <button onClick={()=>{if(window.confirm('Abandon career? This cannot be undone.')){localStorage.removeItem(CAREER_KEY);setCareer(null);}}} style={{background:'none',border:`1px solid ${C.border}`,borderRadius:5,color:C.muted,fontSize:10,padding:'3px 8px',cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>Abandon</button>
+        </div>
+        <div style={{display:'flex',overflowX:'auto',marginBottom:-1}}>
+          {CAREER_VIEWS.map(v=><button key={v.id} onClick={()=>setView(v.id)} style={{background:'none',border:'none',cursor:'pointer',color:view===v.id?C.accent:C.muted,fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:600,padding:'6px 10px',whiteSpace:'nowrap',borderBottom:view===v.id?`2px solid ${C.accent}`:'2px solid transparent',flexShrink:0}}>{v.label}</button>)}
+        </div>
+      </div>
+      <div style={{padding:16,paddingBottom:40}}>
+        {view==='hub'      &&<CareerHubView career={career} onNav={setView}/>}
+        {view==='table'    &&<CareerTableView career={career}/>}
+        {view==='lineup'   &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Lineup builder — coming next</div>}
+        {view==='sim'      &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Live match sim — coming next</div>}
+        {view==='transfers'&&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Transfer market — coming next</div>}
+        {view==='stats'    &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Stats — coming next</div>}
+        {view==='news'     &&<div style={{color:C.muted,fontSize:13,textAlign:'center',paddingTop:40}}>Career news — coming next</div>}
+      </div>
+    </div>
+  );
+}
+
 const TABS=[
   {id:"fixtures",  label:"Fixtures"},
   {id:"table",     label:"Table"},
@@ -1893,6 +2083,7 @@ const TABS=[
   {id:"news",      label:"News"},
   {id:"odds",      label:"Odds"},
   {id:"create",    label:"Create"},
+  {id:"career",    label:"Career"},
   {id:"manage",    label:"⚙ Manage"},
 ];
 
@@ -1993,6 +2184,7 @@ function App(){
         {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek}/>}
         {tab==="odds"      &&<OddsTab teams={teams} fixtures={fixtures} activeMatchWeek={activeMatchWeek}/>}
         {tab==="create"    &&<CreateTab teams={teams}/>}
+        {tab==="career"    &&<CareerTab teams={teams}/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} activeMatchWeek={activeMatchWeek} setActiveMatchWeek={setActiveMatchWeek} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
     </div>
