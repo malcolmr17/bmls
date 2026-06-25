@@ -2597,6 +2597,14 @@ function CareerTransferView({career,onUpdate}){
     if(s>=5)return`£${Math.round(v*.8)}M–£${Math.round(v*1.2)}M`;
     return'Unknown';
   };
+  const scoreDisplay=p=>{
+    if(p.position==='GK')return'—';
+    const s=p.position==='MDF'?p.mdfAtkScore:p.score;
+    const max=p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
+    if(valueKnown(p))return String(s||5);
+    if(max>=5)return`${Math.max(1,(s||5)-1)}–${Math.min(10,(s||5)+1)}`;
+    return'?';
+  };
 
   const resultColors={accepted:C.green,counter:C.gold,rejected:C.red,flat:C.red,no_budget:C.red};
   const resultMsg=r=>{
@@ -2661,7 +2669,7 @@ function CareerTransferView({career,onUpdate}){
                       <div style={{fontSize:10,color:C.muted}}>{p._team.name}</div>
                     </div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.text}}>{p.position==='GK'?'—':p.position==='MDF'?p.mdfAtkScore:p.score}</div>
+                      <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.text}}>{scoreDisplay(p)}</div>
                       <div style={{fontSize:9,color:C.muted}}>{val}</div>
                     </div>
                   </div>
@@ -2680,7 +2688,7 @@ function CareerTransferView({career,onUpdate}){
                       </div>
                       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                         <span style={{fontSize:11,color:totalOffer>=targetVal*.9?C.green:totalOffer>=targetVal*.65?C.gold:C.muted}}>
-                          Total £{totalOffer}M vs £{targetVal}M
+                          Total £{totalOffer}M vs {valDisplay(sel,sel._team)}
                         </span>
                         <Btn onClick={submitBid} small disabled={!canSubmit}>Submit Bid</Btn>
                       </div>
