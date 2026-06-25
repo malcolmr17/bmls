@@ -232,51 +232,76 @@ function simulateMatch(home,away,fixtures){
 }
 
 function MatchSimPanel({fixture,home,away,fixtures,sim,onSimulate,onApply}){
+  const[minute,setMinute]=useState(0);
+  const[shown,setShown]=useState([]);
+  const[score,setScore]=useState({h:0,a:0});
+  const[speed,setSpeed]=useState(1);
+  const[running,setRunning]=useState(false);
+  const[done,setDone]=useState(false);
+  const iRef=useRef(null);
+  const feedRef=useRef(null);
+  // Restart ticker whenever a new sim result arrives
+  useEffect(()=>{
+    if(!sim)return;
+    clearInterval(iRef.current);
+    setMinute(0);setShown([]);setScore({h:0,a:0});setDone(false);setRunning(true);
+  },[sim]);
+  useEffect(()=>{
+    if(!running||!sim)return;
+    clearInterval(iRef.current);
+    iRef.current=setInterval(()=>setMinute(m=>m<90?m+1:90),1000/speed);
+    return()=>clearInterval(iRef.current);
+  },[running,speed,sim]);
+  useEffect(()=>{
+    if(!sim||minute===0)return;
+    const now=sim.events.filter(e=>e.minute===minute);
+    if(now.length){
+      setShown(p=>[...p,...now]);
+      const goals=now.filter(e=>e.type==='goal');
+      if(goals.length)setScore(s=>{let h=s.h,a=s.a;goals.forEach(e=>{if(e.team==='home')h++;else a++;});return{h,a};});
+    }
+    if(minute>=90){clearInterval(iRef.current);setRunning(false);setDone(true);}
+  },[minute]);
+  useEffect(()=>{if(feedRef.current)feedRef.current.scrollTop=feedRef.current.scrollHeight;},[shown]);
   const ico=t=>t==='goal'?'⚽':t==='yellow'?'🟡':'🟥';
-  const shortName=t=>t.shortName||t.name;
+  const sn=t=>t.shortName||t.name;
   return(
     <div style={{borderTop:`1px solid ${C.border}`,padding:"14px",background:C.bg}}>
       <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:"uppercase",textAlign:"center",marginBottom:12}}>Match Simulator</div>
       {!sim?(
-        <div style={{textAlign:"center"}}><Btn onClick={onSimulate} variant="primary">⚡ Simulate Match</Btn></div>
+        <div style={{textAlign:"center"}}><Btn onClick={onSimulate}>⚡ Simulate Match</Btn></div>
       ):(
         <div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6,marginBottom:14}}>
-            <div style={{textAlign:"right",fontFamily:"'Bebas Neue',sans-serif",fontSize:14,color:C.text,letterSpacing:.5}}>{shortName(home)}</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:42,color:C.gold,letterSpacing:3,textAlign:"center",lineHeight:1,padding:"0 10px"}}>{sim.hGoals}–{sim.aGoals}</div>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:14,color:C.text,letterSpacing:.5}}>{shortName(away)}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:6,marginBottom:4}}>
+            <div style={{textAlign:"right",fontFamily:"'Bebas Neue',sans-serif",fontSize:14,color:C.text,letterSpacing:.5}}>{sn(home)}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:42,color:C.gold,letterSpacing:3,textAlign:"center",lineHeight:1,padding:"0 10px"}}>{score.h}–{score.a}</div>
+            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:14,color:C.text,letterSpacing:.5}}>{sn(away)}</div>
           </div>
-          {sim.events.length>0?(
-            <div style={{marginBottom:14,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,padding:"10px 0"}}>
-              {sim.events.map((e,i)=>{
-                const isH=e.team==='home';
-                const main=e.type==='goal'?`${e.player.name}${e.isPen?' (pen)':''}`:`${e.player.name}`;
-                const ast=e.assist?`↗ ${e.assist.name}`:'';
+          <div style={{textAlign:"center",fontSize:10,fontWeight:700,letterSpacing:2,color:done?C.green:running?C.red:C.muted,marginBottom:6}}>
+            {done?"FULL TIME":minute===45?"HALF TIME":running?`${minute}'`:"—"}
+          </div>
+          {running&&<div style={{height:2,background:C.surface,borderRadius:1,marginBottom:6,overflow:"hidden"}}><div style={{height:"100%",background:C.accent,width:`${(minute/90)*100}%`,transition:"width 0.9s linear"}}/></div>}
+          {running&&<div style={{display:"flex",gap:5,marginBottom:8,justifyContent:"center"}}>{[1,2,5].map(s=><button key={s} onClick={()=>setSpeed(s)} style={{background:speed===s?`${C.accent}22`:"transparent",color:speed===s?C.accent:C.muted,border:`1px solid ${speed===s?C.accent:C.border}`,borderRadius:4,padding:"3px 10px",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{s}×</button>)}</div>}
+          <div ref={feedRef} style={{marginBottom:10,borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,padding:"10px 0",maxHeight:200,overflowY:"auto"}}>
+            {shown.length===0
+              ?<div style={{fontSize:11,color:C.muted,textAlign:"center",fontStyle:"italic",padding:"8px 0"}}>Waiting for kick off…</div>
+              :shown.map((e,i)=>{
+                const isH=e.team==="home";
+                const main=e.type==="goal"?`${e.player.name}${e.isPen?" (pen)":""}`:`${e.player.name}`;
+                const ast=e.assist?`↗ ${e.assist.name}`:"";
                 return(
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 32px 1fr",gap:2,marginBottom:5,alignItems:"start"}}>
-                    {isH?(
-                      <div style={{textAlign:"right",paddingRight:4}}>
-                        <div style={{fontSize:11,color:C.text,fontWeight:600}}>{main} {ico(e.type)}</div>
-                        {ast&&<div style={{fontSize:9,color:C.muted}}>{ast}</div>}
-                      </div>
-                    ):<div/>}
+                    {isH?<div style={{textAlign:"right",paddingRight:4}}><div style={{fontSize:11,color:C.text,fontWeight:600}}>{main} {ico(e.type)}</div>{ast&&<div style={{fontSize:9,color:C.muted}}>{ast}</div>}</div>:<div/>}
                     <div style={{textAlign:"center",fontSize:9,color:C.muted,fontWeight:700,paddingTop:2}}>{e.minute}'</div>
-                    {!isH?(
-                      <div style={{paddingLeft:4}}>
-                        <div style={{fontSize:11,color:C.text,fontWeight:600}}>{ico(e.type)} {main}</div>
-                        {ast&&<div style={{fontSize:9,color:C.muted,paddingLeft:14}}>{ast}</div>}
-                      </div>
-                    ):<div/>}
+                    {!isH?<div style={{paddingLeft:4}}><div style={{fontSize:11,color:C.text,fontWeight:600}}>{ico(e.type)} {main}</div>{ast&&<div style={{fontSize:9,color:C.muted,paddingLeft:14}}>{ast}</div>}</div>:<div/>}
                   </div>
                 );
-              })}
-            </div>
-          ):(
-            <div style={{fontSize:11,color:C.muted,textAlign:"center",fontStyle:"italic",marginBottom:14}}>No goals or bookings.</div>
-          )}
+              })
+            }
+          </div>
           <div style={{display:"flex",gap:8,justifyContent:"center"}}>
             <Btn onClick={onSimulate} variant="secondary" small>Re-simulate</Btn>
-            {onApply&&<Btn onClick={onApply} variant="success" small>Apply Result ✓</Btn>}
+            {onApply&&done&&<Btn onClick={onApply} variant="success" small>Apply Result ✓</Btn>}
           </div>
         </div>
       )}
