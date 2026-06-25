@@ -2178,6 +2178,18 @@ function CareerHubView({career,onNav}){
           </div>
         );
       })()}
+      {(myTeam?.players||[]).length>0&&(
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:10}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>Squad Morale</div>
+          {(myTeam.players).map(p=>{const sat=moods[p.id]??65;const mi=moodInfo(sat);return(
+            <div key={p.id} style={{display:'flex',alignItems:'center',gap:8,marginBottom:7}}>
+              <div style={{fontSize:12,color:C.sub,flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+              <div style={{width:80,height:5,borderRadius:3,background:C.border,overflow:'hidden',flexShrink:0}}><div style={{width:`${sat}%`,height:'100%',background:mi.color,borderRadius:3}}/></div>
+              <div style={{fontSize:11,color:mi.color,fontWeight:700,minWidth:56,textAlign:'right'}}>{mi.label}</div>
+            </div>
+          );})}
+        </div>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
         {[{id:'table',label:'📊 Table'},{id:'transfers',label:'💰 Transfers'},{id:'stats',label:'⚽ Stats'},{id:'news',label:'📰 News'}].map(item=>(
           <button key={item.id} onClick={()=>onNav(item.id)} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'12px 10px',cursor:'pointer',color:C.text,fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",textAlign:'left'}}>{item.label}</button>
@@ -2286,7 +2298,8 @@ function CareerLineupView({career,onSave}){
                 <div key={p.id} onClick={()=>assign(selSlot.pos,selSlot.idx,p.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 6px',borderRadius:7,cursor:'pointer',marginBottom:2,opacity:inOtherSlot?.5:1,background:getStarter(selSlot.pos,selSlot.idx)?.id===p.id?`${C.accent}22`:'transparent'}}>
                   <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</div>
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}{oop&&<span style={{fontSize:9,color:C.gold,marginLeft:6}}>OOP ×0.7</span>}{inOtherSlot&&<span style={{fontSize:9,color:C.muted,marginLeft:6}}>in lineup</span>}<span style={{display:'inline-block',width:7,height:7,borderRadius:'50%',background:moodInfo(moods[p.id]??65).color,marginLeft:6,verticalAlign:'middle',flexShrink:0}}/></div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}{oop&&<span style={{fontSize:9,color:C.gold,marginLeft:6}}>OOP ×0.7</span>}{inOtherSlot&&<span style={{fontSize:9,color:C.muted,marginLeft:6}}>in lineup</span>}</div>
+                    <div style={{fontSize:10,color:moodInfo(moods[p.id]??65).color,fontWeight:700,marginTop:1}}>{moodInfo(moods[p.id]??65).label}</div>
                   </div>
                   <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.text,minWidth:20,textAlign:'right'}}>{p.position==='GK'?'—':p.position==='MDF'?p.mdfAtkScore:p.score}</div>
                 </div>
@@ -2651,9 +2664,9 @@ function CareerTransferView({career,onUpdate}){
                 <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700}}>{p.position}</div>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:700,color:C.text}}>{p.name}{wantsOut&&<span style={{fontSize:9,color:C.red,marginLeft:6,fontWeight:700}}>WANTS OUT</span>}</div>
-                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}}>
-                    <div style={{width:40,height:3,borderRadius:2,background:C.border,overflow:'hidden'}}><div style={{width:`${sat}%`,height:'100%',background:mi.color,borderRadius:2}}/></div>
-                    <span style={{fontSize:10,color:mi.color,fontWeight:700}}>{mi.label}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:8,marginTop:3}}>
+                    <div style={{width:64,height:5,borderRadius:3,background:C.border,overflow:'hidden',flexShrink:0}}><div style={{width:`${sat}%`,height:'100%',background:mi.color,borderRadius:3}}/></div>
+                    <span style={{fontSize:11,color:mi.color,fontWeight:700}}>{mi.label}</span>
                     <span style={{fontSize:10,color:C.muted}}>{valDisplay(p,myTeam)}</span>
                   </div>
                 </div>
