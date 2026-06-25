@@ -171,6 +171,20 @@ function predictedLineup(team,fixtures){
   return{gk:gk||null,defs:arrangeWide(defs),mdfs,fwds:arrangeWide(fwds),formation,bench};
 }
 
+function bestFormation(team){
+  const ps=team.players.filter(p=>p.position!=='GK');
+  const dc=ps.filter(p=>p.position==='DEF').length;
+  const mc=ps.filter(p=>p.position==='MDF').length;
+  const fc=ps.filter(p=>p.position==='FWD').length;
+  return FORMATIONS.reduce((best,f)=>{
+    const d=Math.abs(dc-f.def)+Math.abs(mc-f.mdf)+Math.abs(fc-f.fwd);
+    return d<best.d?{f,d}:best;
+  },{f:FORMATIONS[0],d:Infinity}).f.id;
+}
+function careerCpuLineup(team,fixtures){
+  return predictedLineup({...team,formation:bestFormation(team)},fixtures);
+}
+
 function predictMatch(home,away){
   const h=lineupRatings(home),a=lineupRatings(away);
   const hxg=+((1.25*(h.atk+0.4)/Math.max(a.def,0.5))*0.85).toFixed(1);
@@ -2030,12 +2044,21 @@ function simulateFromLineups(hl,al,hTeam,aTeam){
   let hG=pois(hxg),aG=pois(axg);
   if(firstRed(hPlayers)<70&&Math.random()<0.45)hG=Math.max(0,hG-1);
   if(firstRed(aPlayers)<70&&Math.random()<0.45)aG=Math.max(0,aG-1);
-  // Substitutions (46–85')
+  // Substitutions — forced injury subs first, then tactical (46–85')
   const genSubs=(starters,bench,team)=>{
     if(!bench?.length)return;
+    const avB=[...bench.filter(p=>!redAt[p.id]&&!injuredAt[p.id])];
+    starters.filter(p=>injuredAt[p.id]&&p.position!=='GK').forEach(inj=>{
+      if(!avB.length)return;
+      const pi=avB.findIndex(b=>b.position===inj.position);
+      const idx=pi>=0?pi:0;
+      const playerOn=avB.splice(idx,1)[0];
+      const min=Math.min(89,injuredAt[inj.id]+1);
+      subbedOff[inj.id]=min;subOnInfo[playerOn.id]={player:playerOn,minute:min,team};
+      events.push({team,type:'sub',minute:min,playerOn,playerOff:inj,injury:true});
+    });
     const n=Math.random()<.25?0:Math.random()<.6?1:2;
-    const avB=bench.filter(p=>!redAt[p.id]&&!injuredAt[p.id]);
-    const avS=starters.filter(p=>p.position!=='GK'&&!redAt[p.id]&&!injuredAt[p.id]);
+    const avS=starters.filter(p=>p.position!=='GK'&&!redAt[p.id]&&!injuredAt[p.id]&&!subbedOff[p.id]);
     for(let i=0;i<n&&avB.length&&avS.length;i++){
       const min=Math.floor(Math.random()*40)+46;
       const pi=Math.floor(Math.random()*avB.length);
@@ -2150,14 +2173,29 @@ function CareerSetupView({teams,onStart}){
   );
 }
 
+function agePlayers(teams){
+  return teams.map(t=>({...t,players:t.players.map(p=>{
+    const age=(p.age||25)+1;
+    let d=0;
+    if(age<=22)d=Math.random()<0.45?1:0;
+    else if(age<=27)d=Math.random()<0.2?0.5:0;
+    else if(age<=30)d=Math.random()<0.4?-0.5:0;
+    else d=Math.random()<0.55?-1:Math.random()<0.35?-0.5:0;
+    const cl=v=>Math.max(1,Math.min(10,Math.round((v+d)*2)/2));
+    return{...p,age,score:cl(p.score||5),mdfAtkScore:cl(p.mdfAtkScore||5),mdfDefScore:cl(p.mdfDefScore||5)};
+  })}));
+}
+
 function startNewSeason(career){
-  const active=career.teams.filter(t=>t.name&&t.players.length>0);
+  const agedTeams=agePlayers(career.teams);
+  const active=agedTeams.filter(t=>t.name&&t.players.length>0);
   const newFixtures=generateCareerFixtures(active.map(t=>t.id));
-  const myTeam=career.teams.find(t=>t.id===career.myTeamId);
-  const newCpuBids=genPreseasonBids(career.teams,career.myTeamId,myTeam);
+  const myTeam=agedTeams.find(t=>t.id===career.myTeamId);
+  const newCpuBids=genPreseasonBids(agedTeams,career.myTeamId,myTeam);
   const prevSeason={season:career.season||1,playerStats:career.playerStats,transfers:career.transfers,fixtures:career.fixtures};
   return{
     ...career,
+    teams:agedTeams,
     season:(career.season||1)+1,
     matchWeek:1,
     phase:'lineup',
@@ -2189,6 +2227,37 @@ function CareerHubView({career,onNav,onNewSeason}){
           <div style={{fontSize:10,color:C.gold,fontWeight:700,letterSpacing:2,textTransform:'uppercase',marginBottom:4}}>Season {career.season||1}</div>
           <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:30,color:C.gold,letterSpacing:2}}>Season Complete</div>
           <div style={{fontSize:13,color:C.muted,marginTop:4,marginBottom:14}}>Final position: {myPos}{myPos===1?' 🏆':myPos<=3?' 🥉':''} · Morale and squad carry over</div>
+          {(()=>{
+            const allPl=career.teams.flatMap(t=>t.players.map(p=>({...p,_team:t})));
+            const wSt=allPl.filter(p=>career.playerStats?.[p.id]);
+            if(!wSt.length)return null;
+            const byGoals=[...wSt].sort((a,b)=>(career.playerStats[b.id]?.goals||0)-(career.playerStats[a.id]?.goals||0));
+            const byAst=[...wSt].sort((a,b)=>(career.playerStats[b.id]?.assists||0)-(career.playerStats[a.id]?.assists||0));
+            const byMvp=[...wSt].sort((a,b)=>{
+              const sc=p=>(career.playerStats[p.id]?.goals||0)*3+(career.playerStats[p.id]?.assists||0)*2+(career.playerStats[p.id]?.cleanSheets||0)*1.5;
+              return sc(b)-sc(a);
+            });
+            const scorer=byGoals[0],assister=byAst[0],mvp=byMvp[0],winner=table[0];
+            const awards=[
+              {label:'Golden Boot',name:scorer?.name,detail:`${career.playerStats[scorer?.id]?.goals||0} goals · ${scorer?._team?.name}`,color:C.gold},
+              {label:'Assist King',name:assister?.name,detail:`${career.playerStats[assister?.id]?.assists||0} assists · ${assister?._team?.name}`,color:C.accent},
+              {label:'League Champion',name:winner?.name||'—',detail:`${winner?.pts||0} pts`,color:C.green},
+              {label:'Season MVP',name:mvp?.name,detail:`${mvp?._team?.name}`,color:'#a855f7'},
+            ];
+            return(
+              <div style={{marginBottom:14,textAlign:'left'}}>
+                {awards.map(a=>(
+                  <div key={a.label} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}`}}>
+                    <div style={{fontSize:10,color:a.color,fontWeight:700,letterSpacing:1,width:110,flexShrink:0}}>{a.label}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:C.text}}>{a.name||'—'}</div>
+                      <div style={{fontSize:10,color:C.muted}}>{a.detail}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
           <Btn onClick={onNewSeason} style={{width:'100%',background:C.gold,color:'#000',fontWeight:700}}>New Season →</Btn>
         </div>
       )}
@@ -2412,6 +2481,7 @@ function CareerSimView({career,onMatchComplete}){
   const isHome=myFix?.homeId===career.myTeamId;
   const oppTeam=myFix?career.teams.find(t=>t.id===(isHome?myFix.awayId:myFix.homeId)):null;
   const[simData,setSimData]=useState(null);
+  const[lineups,setLineups]=useState(null);
   const[minute,setMinute]=useState(0);
   const[shown,setShown]=useState([]);
   const[score,setScore]=useState({h:0,a:0});
@@ -2426,11 +2496,12 @@ function CareerSimView({career,onMatchComplete}){
   const kick=()=>{
     if(!myFix||!oppTeam)return;
     const myLo=buildCareerLineup(myTeam,career.lineup?.starters||[],career.lineup?.formation||myTeam.formation,career.playerMoods||{});
-    const oppLo=predictedLineup(oppTeam,career.fixtures);
+    const oppLo=careerCpuLineup(oppTeam,career.fixtures);
     const r=isHome?simulateFromLineups(myLo,oppLo,myTeam,oppTeam):simulateFromLineups(oppLo,myLo,oppTeam,myTeam);
+    setLineups(isHome?{home:myLo,away:oppLo}:{home:oppLo,away:myLo});
     setSimData(r);setMinute(0);setShown([]);setScore({h:0,a:0});setDone(false);setRunning(true);
   };
-  const reset=()=>{setSimData(null);setMinute(0);setShown([]);setScore({h:0,a:0});setDone(false);setRunning(false);};
+  const reset=()=>{setSimData(null);setLineups(null);setMinute(0);setShown([]);setScore({h:0,a:0});setDone(false);setRunning(false);};
 
   useEffect(()=>{
     if(!running||!simData)return;
@@ -2470,7 +2541,7 @@ function CareerSimView({career,onMatchComplete}){
     cpuFixes.forEach(f=>{
       const ht=updated.teams.find(t=>t.id===f.homeId),at=updated.teams.find(t=>t.id===f.awayId);
       if(!ht||!at)return;
-      const r=simulateFromLineups(predictedLineup(ht,updated.fixtures),predictedLineup(at,updated.fixtures),ht,at);
+      const r=simulateFromLineups(careerCpuLineup(ht,updated.fixtures),careerCpuLineup(at,updated.fixtures),ht,at);
       r.events.forEach(e=>{
         if(e.type==='goal'){upd(e.player.id,'goals',1);if(e.isPen)upd(e.player.id,'penGoals',1);if(e.assist)upd(e.assist.id,'assists',1);}
         else if(e.type==='yellow')upd(e.player.id,'yellowCards',1);
@@ -2570,6 +2641,32 @@ function CareerSimView({career,onMatchComplete}){
               );
             })}
           </div>
+          {lineups&&(
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:10}}>
+              {[{lo:lineups.home,name:hName},{lo:lineups.away,name:aName}].map(({lo,name},si)=>(
+                <div key={si} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 8px'}}>
+                  <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:6,textAlign:'center'}}>{name}</div>
+                  {[lo.gk,...(lo.defs||[]),...(lo.mdfs||[]),...(lo.fwds||[])].filter(Boolean).map((p,i)=>(
+                    <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:3}}>
+                      <div style={{fontSize:9,color:posColor(p.position),fontWeight:700,width:22,flexShrink:0}}>{p.position}</div>
+                      <div style={{fontSize:11,color:C.text,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                    </div>
+                  ))}
+                  {(lo.bench||[]).length>0&&(
+                    <div style={{borderTop:`1px solid ${C.border}`,marginTop:6,paddingTop:6}}>
+                      <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1,marginBottom:3}}>BENCH</div>
+                      {lo.bench.map((p,i)=>(
+                        <div key={i} style={{display:'flex',gap:4,alignItems:'center',marginBottom:2}}>
+                          <div style={{fontSize:9,color:C.muted,fontWeight:700,width:22,flexShrink:0}}>{p.position}</div>
+                          <div style={{fontSize:10,color:C.muted,flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {done&&<div style={{display:'flex',gap:8}}><Btn onClick={reset} variant="secondary" style={{flex:1}}>Re-simulate</Btn><Btn onClick={apply} variant="success" style={{flex:1}}>Accept Result ✓</Btn></div>}
         </div>
       )}
@@ -2614,6 +2711,16 @@ function CareerStatsView({career}){
   );
 }
 
+function pickSwapOffer(bidTeam,targetVal,prefPositions){
+  const cands=bidTeam.players.filter(p=>p.position!=='GK'&&playerValue(p,bidTeam)<targetVal);
+  if(!cands.length)return{swapPlayer:null,amount:Math.round(targetVal*(0.55+Math.random()*.20))};
+  const pref=cands.filter(p=>prefPositions.includes(p.position)).sort((a,b)=>playerValue(b,bidTeam)-playerValue(a,bidTeam));
+  const any=[...cands].sort((a,b)=>playerValue(b,bidTeam)-playerValue(a,bidTeam));
+  const swapPlayer=pref.length>0?pref[0]:any[0];
+  const swapVal=playerValue(swapPlayer,bidTeam);
+  return{swapPlayer,amount:Math.max(0,Math.round((targetVal-swapVal)*(0.55+Math.random()*.20)))};
+}
+
 function genPreseasonBids(teams,myTeamId,myTeam){
   const bids=[];
   const eligible=(myTeam?.players||[]).filter(p=>p.position!=='GK'&&!p.untouchable&&(p.score||0)>=6);
@@ -2621,25 +2728,20 @@ function genPreseasonBids(teams,myTeamId,myTeam){
   if(!eligible.length||!others.length)return bids;
   const n=Math.random()<0.35?3:Math.random()<0.6?2:1;
   const sh=a=>[...a].sort(()=>Math.random()-.5);
-  const quality=p=>p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
   const{atk,def}=lineupRatings(myTeam);
   const userNeedsAtk=atk<=def;
   const swapPosPref=userNeedsAtk?['FWD','MDF']:['DEF','MDF'];
   sh(eligible).slice(0,n).forEach((p,i)=>{
     const val=playerValue(p,myTeam);
     const bidTeam=others[Math.floor(Math.random()*others.length)];
-    const swapCands=bidTeam.players.filter(bp=>swapPosPref.includes(bp.position)&&bp.position!=='GK').sort((a,b)=>quality(b)-quality(a));
-    const anyOut=bidTeam.players.filter(bp=>bp.position!=='GK').sort((a,b)=>quality(b)-quality(a));
-    const pool=swapCands.length>0?swapCands:anyOut;
-    const swapPlayer=pool.length>0?pool[Math.min(Math.floor(pool.length/2),pool.length-1)]:null;
-    bids.push({id:Date.now()+i,player:p,bidTeam,amount:Math.round(val*(0.40+Math.random()*.20)),val,swapPlayer,negotiationRound:0});
+    const{swapPlayer,amount}=pickSwapOffer(bidTeam,val,swapPosPref);
+    bids.push({id:Date.now()+i,player:p,bidTeam,amount,val,swapPlayer,negotiationRound:0});
   });
   return bids;
 }
 
 function maybeAddCpuBid(career,teams,myTeam){
   if(Math.random()>0.45)return null;
-  const quality=p=>p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
   const eligible=(myTeam?.players||[]).filter(p=>p.position!=='GK'&&!p.untouchable&&(p.score||0)>=5);
   const others=teams.filter(t=>t.id!==career.myTeamId&&t.name&&t.players.length>=2);
   if(!eligible.length||!others.length)return null;
@@ -2649,11 +2751,8 @@ function maybeAddCpuBid(career,teams,myTeam){
   const player=sh(eligible)[0];
   const val=playerValue(player,myTeam);
   const bidTeam=others[Math.floor(Math.random()*others.length)];
-  const swapCands=bidTeam.players.filter(bp=>swapPosPref.includes(bp.position)&&bp.position!=='GK').sort((a,b)=>quality(b)-quality(a));
-  const anyOut=bidTeam.players.filter(bp=>bp.position!=='GK').sort((a,b)=>quality(b)-quality(a));
-  const pool=swapCands.length>0?swapCands:anyOut;
-  const swapPlayer=pool.length>0?pool[Math.min(Math.floor(pool.length/2),pool.length-1)]:null;
-  return{id:Date.now()+Math.floor(Math.random()*9999),player,bidTeam,amount:Math.round(val*(0.40+Math.random()*.20)),val,swapPlayer,negotiationRound:0};
+  const{swapPlayer,amount}=pickSwapOffer(bidTeam,val,swapPosPref);
+  return{id:Date.now()+Math.floor(Math.random()*9999),player,bidTeam,amount,val,swapPlayer,negotiationRound:0};
 }
 
 function maybeDoCpuTrade(career,teams){
@@ -2661,7 +2760,6 @@ function maybeDoCpuTrade(career,teams){
   const eligible=teams.filter(t=>t.id!==career.myTeamId&&t.name&&t.players.length>=6);
   if(eligible.length<2)return null;
   const sh=a=>[...a].sort(()=>Math.random()-.5);
-  const quality=p=>p.position==='MDF'?Math.max(p.mdfAtkScore||0,p.mdfDefScore||0):(p.score||0);
   const atkScore=p=>p.position==='FWD'?(p.score||0):p.position==='MDF'?(p.mdfAtkScore||0):0;
   const defScore=p=>p.position==='DEF'?(p.score||0):p.position==='MDF'?(p.mdfDefScore||0):0;
   for(const buyer of sh(eligible)){
@@ -2677,17 +2775,13 @@ function maybeDoCpuTrade(career,teams){
       const player=targets[0];
       const amount=Math.round(playerValue(player,seller)*(0.80+Math.random()*.25));
       if((buyer.careerBudget||0)<amount)continue;
-      // Swap: send a player the SELLER wants (fills seller's weakness), not buyer's worst
+      // Swap: send a player cheaper than target that fills seller's weakness
       const{atk:sAtk,def:sDef}=lineupRatings(seller);
       const sellerNeedsAtk=sAtk<=sDef;
       const swapPosPref=sellerNeedsAtk?['FWD','MDF']:['DEF','MDF'];
-      const swapCands=buyer.players.filter(p=>swapPosPref.includes(p.position)&&p.position!=='GK').sort((a,b)=>quality(b)-quality(a));
-      const anyOut=buyer.players.filter(p=>p.position!=='GK').sort((a,b)=>quality(b)-quality(a));
-      const pool=swapCands.length>0?swapCands:anyOut;
-      if(!pool.length)continue;
-      // Pick a decent player — not their star, not their worst; middle of the pool
-      const swapPlayer=pool[Math.min(Math.floor(pool.length/2),pool.length-1)];
-      return{player,seller,buyer,amount,swapPlayer};
+      const{swapPlayer,amount:swapAmount}=pickSwapOffer(buyer,playerValue(player,seller),swapPosPref);
+      if(!swapPlayer&&(buyer.careerBudget||0)<amount)continue;
+      return{player,seller,buyer,amount:swapAmount,swapPlayer};
     }
   }
   return null;
@@ -2762,27 +2856,14 @@ function CareerTransferView({career,onUpdate}){
   const submitCounterBid=()=>{
     if(!counterBid)return;
     const demandCash=parseInt(counterCashInput)||0;
-    const{player,bidTeam,swapPlayer,negotiationRound=0}=counterBid;
+    const{player,bidTeam,swapPlayer}=counterBid;
     const myVal=playerValue(player,myTeam);
     const swapVal=swapPlayer?playerValue(swapPlayer,career.teams.find(t=>t.id===bidTeam.id)||bidTeam):0;
     const totalDemand=demandCash+swapVal;
     const pct=myVal>0?totalDemand/myVal:1;
-    const isLastRound=negotiationRound>=1;
-    if(pct<=0.75){
-      // CPU accepts — deal done at user's terms
-      acceptCpuBid({...counterBid,amount:demandCash});
-      setCounterBid(null);setCounterCashInput('');
-    } else if(pct<=0.90&&!isLastRound){
-      // CPU meets in the middle — final offer
-      const midCash=Math.round((demandCash+counterBid.amount)/2);
-      const updBids=(career.cpuBids||[]).map(b=>b.id===counterBid.id?{...b,amount:midCash,negotiationRound:1,finalOffer:true}:b);
-      onUpdate({...career,cpuBids:updBids});
-      setCounterBid(null);setCounterCashInput('');
-    } else {
-      // CPU walks away — too greedy
-      removeCpuBid(counterBid);
-      setCounterBid(null);setCounterCashInput('');
-    }
+    if(pct<=0.85)acceptCpuBid({...counterBid,amount:demandCash});
+    // else: rejected — bid stays open so user can try again
+    setCounterBid(null);setCounterCashInput('');
   };
 
   const valDisplay=(p,team)=>{
@@ -2821,12 +2902,11 @@ function CareerTransferView({career,onUpdate}){
                 <div style={{flex:1}}>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <span style={{fontSize:13,fontWeight:700,color:C.text}}>{b.player.name}</span>
-                    {b.finalOffer&&<span style={{fontSize:9,color:C.red,fontWeight:700,letterSpacing:1,background:`${C.red}22`,borderRadius:3,padding:'1px 5px'}}>FINAL OFFER</span>}
                   </div>
                   <div style={{fontSize:10,color:C.muted,marginTop:1}}>{b.bidTeam.name} offer £{b.amount}M{b.swapPlayer?` + ${b.swapPlayer.name} (${b.swapPlayer.position})`:''}</div>
                 </div>
                 <Btn onClick={()=>acceptCpuBid(b)} variant="success" small>Accept</Btn>
-                {!b.finalOffer&&<Btn onClick={()=>{setCounterBid(b);setCounterCashInput('');}} variant="secondary" small>Counter</Btn>}
+                <Btn onClick={()=>{setCounterBid(b);setCounterCashInput('');}} variant="secondary" small>Counter</Btn>
                 <Btn onClick={()=>{removeCpuBid(b);if(counterBid?.id===b.id){setCounterBid(null);setCounterCashInput('');}}} variant="secondary" small>Decline</Btn>
               </div>
               {counterBid?.id===b.id&&(
@@ -3009,7 +3089,7 @@ function CareerOpponentView({career}){
   const myTeam=career.teams.find(t=>t.id===career.myTeamId);
   const opp=career.teams.find(t=>t.id===(isHome?myFix.awayId:myFix.homeId));
   if(!opp)return null;
-  const lo=predictedLineup(opp,played);
+  const lo=careerCpuLineup(opp,played);
   const pred=isHome?predictMatch(myTeam,opp):predictMatch(opp,myTeam);
   const myGoals=isHome?pred.hGoals:pred.aGoals;
   const oppGoals=isHome?pred.aGoals:pred.hGoals;
@@ -3089,7 +3169,56 @@ function CareerNewsView({career}){
   );
 }
 
-const CAREER_VIEWS=[{id:'hub',label:'Hub'},{id:'lineup',label:'Lineup'},{id:'sim',label:'Match'},{id:'transfers',label:'Transfers'},{id:'table',label:'Table'},{id:'stats',label:'Stats'},{id:'news',label:'News'}];
+function CareerTeamsView({career}){
+  const[sel,setSel]=useState(null);
+  const teams=career.teams.filter(t=>t.name&&t.players.length>0);
+  return(
+    <div style={{paddingBottom:20}}>
+      {teams.map(t=>{
+        const{atk,def}=lineupRatings(t);
+        const isOpen=sel===t.id;
+        return(
+          <div key={t.id} style={{marginBottom:6}}>
+            <div onClick={()=>setSel(isOpen?null:t.id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:C.card,border:`1px solid ${isOpen?C.accent:C.border}`,borderRadius:isOpen?'8px 8px 0 0':8,cursor:'pointer'}}>
+              <TeamBadge color={t.color} crest={t.crest} size={22}/>
+              <div style={{flex:1,fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:C.text,letterSpacing:.5}}>{t.name}</div>
+              <div style={{display:'flex',gap:12}}>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.red,lineHeight:1}}>{atk.toFixed(1)}</div>
+                  <div style={{fontSize:8,color:C.muted,letterSpacing:1}}>ATK</div>
+                </div>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.accent,lineHeight:1}}>{def.toFixed(1)}</div>
+                  <div style={{fontSize:8,color:C.muted,letterSpacing:1}}>DEF</div>
+                </div>
+              </div>
+              <div style={{fontSize:11,color:C.muted}}>{isOpen?'▲':'▼'}</div>
+            </div>
+            {isOpen&&(
+              <div style={{background:C.surface,border:`1px solid ${C.accent}`,borderTop:'none',borderRadius:'0 0 8px 8px',padding:'8px 12px'}}>
+                <div style={{fontSize:9,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:6}}>Squad · {bestFormation(t)}</div>
+                {t.players.map(p=>{
+                  const q=p.position==='MDF'?`${p.mdfAtkScore||5}/${p.mdfDefScore||5}`:(p.score||5);
+                  return(
+                    <div key={p.id} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderBottom:`1px solid ${C.border}`}}>
+                      <div style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:3,padding:'1px 5px',fontSize:9,fontWeight:700,width:28,textAlign:'center',flexShrink:0}}>{p.position}</div>
+                      <div style={{flex:1,fontSize:12,color:p.injured||p.suspended?C.muted:C.text,fontWeight:600}}>{p.name}{p.injured?' 🤕':''}{p.suspended?' 🟥':''}</div>
+                      <div style={{fontSize:11,color:C.muted}}>{q}</div>
+                      <div style={{fontSize:10,color:C.muted}}>Age {p.age||25}</div>
+                      <div style={{fontSize:10,color:C.gold}}>£{playerValue(p,t)}M</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const CAREER_VIEWS=[{id:'hub',label:'Hub'},{id:'lineup',label:'Lineup'},{id:'sim',label:'Match'},{id:'transfers',label:'Transfers'},{id:'teams',label:'Teams'},{id:'table',label:'Table'},{id:'stats',label:'Stats'},{id:'news',label:'News'}];
 
 function CareerTab({teams}){
   const[career,setCareer]=useState(()=>loadCareer());
@@ -3118,6 +3247,7 @@ function CareerTab({teams}){
         {view==='lineup'   &&<CareerLineupView career={career} onSave={lineup=>{update({...career,lineup});setView('hub');}}/>}
         {view==='sim'      &&<CareerSimView career={career} onMatchComplete={c=>{update(c);setView('hub');}}/>}
         {view==='transfers'&&<CareerTransferView career={career} onUpdate={update}/>}
+        {view==='teams'    &&<CareerTeamsView career={career}/>}
         {view==='stats'    &&<CareerStatsView career={career}/>}
         {view==='news'     &&<CareerNewsView career={career}/>}
         {view==='opponent' &&<CareerOpponentView career={career}/>}
