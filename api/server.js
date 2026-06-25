@@ -60,6 +60,22 @@ app.get('/bundle.js', (req, res) => {
   res.sendFile(join(__dirname, 'bundle.js'))
 })
 
+app.get('/service-worker.js', (req, res) => {
+  res.setHeader('Service-Worker-Allowed', '/')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.sendFile(join(__dirname, 'service-worker.js'))
+})
+
+app.get('/manifest.json', (req, res) => {
+  res.sendFile(join(__dirname, 'manifest.json'))
+})
+
+app.get('/icon.svg', (req, res) => {
+  res.sendFile(join(__dirname, 'icon.svg'))
+})
+
+app.use('/fonts', express.static(join(__dirname, 'fonts')))
+
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'index.html'))
 })

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#111827"/>
+  <circle cx="256" cy="256" r="160" fill="#1E293B" stroke="#3B82F6" stroke-width="8"/>
+  <polygon points="256,130 290,200 370,200 308,245 330,325 256,278 182,325 204,245 142,200 222,200" fill="#3B82F6"/>
+  <text x="256" y="430" font-family="Arial,sans-serif" font-size="72" font-weight="700" fill="#F59E0B" text-anchor="middle" letter-spacing="4">BMLS</text>
+</svg>
