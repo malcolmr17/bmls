@@ -2204,6 +2204,32 @@ function CareerHubView({career,onNav}){
         ))}
       </div>
       {(()=>{
+        const myResults=played.filter(f=>f.homeId===career.myTeamId||f.awayId===career.myTeamId).slice(-5).reverse();
+        if(!myResults.length)return null;
+        return(
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 14px',marginBottom:10}}>
+            <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>Recent Results</div>
+            {myResults.map(f=>{
+              const h=f.homeId===career.myTeamId;
+              const oppTeam=career.teams.find(t=>t.id===(h?f.awayId:f.homeId));
+              const gs=h?f.homeScore:f.awayScore,ga=h?f.awayScore:f.homeScore;
+              const res=gs>ga?'W':gs<ga?'L':'D';
+              const col=res==='W'?C.green:res==='L'?C.red:C.gold;
+              return(
+                <div key={f.matchWeek} style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                  <div style={{width:22,height:22,borderRadius:5,background:`${col}22`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                    <span style={{fontSize:11,fontWeight:900,color:col}}>{res}</span>
+                  </div>
+                  <div style={{flex:1,fontSize:12,color:C.sub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h?'vs':'@'} {oppTeam?.name||'?'}</div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.text,letterSpacing:1}}>{gs}–{ga}</div>
+                  <div style={{fontSize:10,color:C.muted,minWidth:28,textAlign:'right'}}>MW{f.matchWeek}</div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+      {(()=>{
         const ps=myTeam?.players||[];
         const unhappy=ps.filter(p=>(moods[p.id]??65)<40);
         if(unhappy.length===0)return null;
