@@ -76,6 +76,13 @@ app.get('/icon.svg', (req, res) => {
 
 app.use('/fonts', express.static(join(__dirname, 'fonts')))
 
+app.get('/worldcup', (req, res) => {
+  res.sendFile(join(__dirname, 'worldcup.html'))
+})
+app.get('/worldcup/bundle.js', (req, res) => {
+  res.sendFile(join(__dirname, 'worldcup-bundle.js'))
+})
+
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'index.html'))
 })
