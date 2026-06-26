@@ -255,51 +255,88 @@ function NationsManageView({nations,setNations,teams,onToast}){
 }
 
 // ── GroupDrawView ────────────────────────────────────────────────────────────
+const POT_COLORS=['#F59E0B','#94A3B8','#CD7F32']; // gold, silver, bronze
+const POT_LABELS=['Pot 1','Pot 2','Pot 3'];
+
 function GroupDrawView({nations,wcMeta,onSaveGroups,onToast}){
   const named=nations.filter(n=>n.name);
-  const[groups,setGroups]=useState({A:[null,null,null],B:[null,null,null],C:[null,null,null],D:[null,null,null]});
-  const allAssigned=Object.values(groups).flat().filter(Boolean);
-  const available=named.filter(n=>!allAssigned.includes(n.id));
-  const setSlot=(gid,idx,nid)=>{
-    const prev=Object.entries(groups).find(([,slots])=>slots.includes(nid));
-    if(prev&&prev[0]!==gid){const[pg,ps]=prev;const ns=[...ps];ns[ns.indexOf(nid)]=null;setGroups(g=>({...g,[pg]:ns}));}
-    setGroups(g=>{const s=[...g[gid]];s[idx]=nid?Number(nid):null;return{...g,[gid]:s};});
+  const scored=useMemo(()=>[...named].map(n=>{const r=lineupRatings(n);return{...n,score:r.atk+r.def,atk:r.atk,def:r.def};}).sort((a,b)=>b.score-a.score),[named.length]);
+  const pots=[scored.slice(0,4),scored.slice(4,8),scored.slice(8,12)];
+  const[drawn,setDrawn]=useState(null); // {A:[id,id,id], B:..., ...}
+  const shuffle=arr=>[...arr].sort(()=>Math.random()-0.5);
+  const autoDraw=()=>{
+    if(named.length<12){onToast(`Need 12 named nations — only ${named.length} set up.`);return;}
+    const[p1,p2,p3]=pots.map(shuffle);
+    setDrawn({A:[p1[0].id,p2[0].id,p3[0].id],B:[p1[1].id,p2[1].id,p3[1].id],C:[p1[2].id,p2[2].id,p3[2].id],D:[p1[3].id,p2[3].id,p3[3].id]});
   };
-  const valid=GROUPS.every(g=>groups[g].filter(Boolean).length===3)&&new Set(allAssigned).size===allAssigned.length;
-  const save=()=>{
-    if(!valid){onToast('Each group needs exactly 3 different nations.');return;}
-    const g=GROUPS.map(id=>({id,nationIds:groups[id].map(Number)}));
-    onSaveGroups(g);
+  const confirm=()=>{
+    if(!drawn)return;
+    onSaveGroups(GROUPS.map(id=>({id,nationIds:drawn[id]})));
   };
-  const sel={background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:'7px 10px',color:C.text,fontSize:13,fontFamily:"'DM Sans',sans-serif",width:'100%',outline:'none'};
+  const potOf=id=>pots.findIndex(p=>p.some(n=>n.id===id));
   return(
     <div>
       <div style={{background:'linear-gradient(135deg,#0a1628 0%,#0f2044 50%,#0a1628 100%)',border:`1px solid #1a3060`,borderRadius:12,padding:'20px',marginBottom:20,textAlign:'center'}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:32,color:C.gold,letterSpacing:4}}>GROUP DRAW</div>
-        <div style={{fontSize:12,color:C.muted,marginTop:4}}>Assign 12 nations to 4 groups of 3</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:4}}>Seeded by ATK + DEF rating · One nation per pot per group</div>
       </div>
-      {named.length<12&&<div style={{background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:C.gold}}>⚠ Only {named.length}/12 nations set up. Go to Manage → Nations to add more.</div>}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
-        {GROUPS.map(gid=>(
-          <div key={gid} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:14}}>
-            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.gold,letterSpacing:2,marginBottom:10}}>Group {gid}</div>
-            {[0,1,2].map(i=>{
-              const nid=groups[gid][i];
-              const nation=nid?nations.find(n=>n.id===nid):null;
-              return(
-                <div key={i} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
-                  {nation&&<TeamBadge color={nation.color} crest={nation.crest} size={20}/>}
-                  <select value={nid||''} onChange={e=>setSlot(gid,i,e.target.value||null)} style={sel}>
-                    <option value="">— pick nation —</option>
-                    {named.map(n=><option key={n.id} value={n.id} disabled={allAssigned.includes(n.id)&&n.id!==nid}>{n.name}</option>)}
-                  </select>
-                </div>
-              );
-            })}
+      {named.length<12&&<div style={{background:C.surface,border:`1px solid ${C.gold}44`,borderRadius:8,padding:'10px 14px',marginBottom:16,fontSize:12,color:C.gold}}>⚠ Only {named.length}/12 nations set up — go to Manage → Nations before drawing.</div>}
+      {/* Pots */}
+      {pots.map((pot,pi)=>(
+        <div key={pi} style={{marginBottom:16}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
+            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:POT_COLORS[pi],letterSpacing:2}}>{POT_LABELS[pi]}</span>
+            <div style={{flex:1,height:1,background:POT_COLORS[pi]+'33'}}/>
+            <span style={{fontSize:10,color:C.muted}}>Ranked {pi*4+1}–{pi*4+4}</span>
           </div>
-        ))}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {pot.length>0?pot.map((n,ni)=>(
+              <div key={n.id} style={{display:'flex',alignItems:'center',gap:10,background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 10px'}}>
+                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:14,color:POT_COLORS[pi],minWidth:18,textAlign:'center'}}>{pi*4+ni+1}</div>
+                <TeamBadge color={n.color} crest={n.crest} size={24}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{n.name}</div>
+                  <div style={{display:'flex',gap:6,marginTop:2}}>
+                    <span style={{fontSize:10,color:C.red}}>A{n.atk}</span>
+                    <span style={{fontSize:10,color:C.green}}>D{n.def}</span>
+                    <span style={{fontSize:10,color:POT_COLORS[pi],fontWeight:700}}>{n.score}</span>
+                  </div>
+                </div>
+              </div>
+            )):[0,1,2,3].map(i=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,background:C.surface,border:`1px dashed ${C.border}`,borderRadius:8,padding:'8px 10px',opacity:0.4}}>
+                <div style={{fontSize:12,color:C.muted}}>—</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {/* Draw button */}
+      <div style={{display:'flex',gap:8,marginTop:4,marginBottom:drawn?20:0}}>
+        <Btn onClick={autoDraw} style={{flex:1}} variant={drawn?'secondary':'primary'}>{drawn?'🎲 Re-draw':'🎲 Draw Groups'}</Btn>
+        {drawn&&<Btn onClick={confirm} variant="success" style={{flex:1}}>✓ Confirm & Generate Fixtures</Btn>}
       </div>
-      <Btn onClick={save} style={{width:'100%',opacity:valid?1:0.5}}>Set Groups & Generate Fixtures</Btn>
+      {/* Drawn groups preview */}
+      {drawn&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          {GROUPS.map(gid=>(
+            <div key={gid} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:12}}>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:C.gold,letterSpacing:2,marginBottom:8}}>Group {gid}</div>
+              {drawn[gid].map(nid=>{
+                const n=nations.find(x=>x.id===nid);
+                const pi=potOf(nid);
+                return(
+                  <div key={nid} style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                    <TeamBadge color={n?.color||C.border} crest={n?.crest} size={20}/>
+                    <span style={{fontSize:12,fontWeight:600,color:C.text,flex:1}}>{n?.name||'?'}</span>
+                    <span style={{fontSize:9,color:POT_COLORS[pi],fontWeight:700,letterSpacing:1}}>{POT_LABELS[pi]}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
