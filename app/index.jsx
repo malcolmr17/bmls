@@ -1027,7 +1027,7 @@ function SquadsTab({teams,fixtures,nations}){
               <TeamBadge color={nation.color} crest={nation.crest} size={52}/>
               <div>
                 <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.text,letterSpacing:2}}>{nation.name}</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:2}}>{nation.players.length} player{nation.players.length!==1?'s':''} · National Squad</div>
+                <div style={{fontSize:11,color:C.muted,marginTop:2}}>Best of {nation.name} · {nation.players.length}/8</div>
               </div>
             </div>
             {["GK","DEF","MDF","FWD"].map(pos=>{
@@ -1180,12 +1180,14 @@ function NationsManageView({nations,setNations,teams,intlFixtures,setIntlFixture
   const saveNation=n=>{const nn=nations.map(x=>x.id===n.id?n:x);setNations(nn);syncNations(nn);};
   const addFromBmls=p=>{
     if(editNation.players.some(x=>x.id===p.id))return;
+    if(editNation.players.length>=8)return;
     const np={...p,club:p.club||''};
     const updated={...editNation,players:[...editNation.players,np]};
     setEditNation(updated);saveNation(updated);setAddMode(null);setSearch('');setNewPlayer(null);
   };
   const addNewPlayer=()=>{
     if(!newPlayer||!newPlayer.name)return;
+    if(editNation.players.length>=8)return;
     const np={...makeNationPlayer(),...newPlayer,id:Date.now()+Math.random()};
     const updated={...editNation,players:[...editNation.players,np]};
     setEditNation(updated);saveNation(updated);setAddMode(null);setNewPlayer(null);setSearch('');
@@ -1219,7 +1221,10 @@ function NationsManageView({nations,setNations,teams,intlFixtures,setIntlFixture
             </div>
           </div>
         </div>
-        <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>Squad ({editNation.players.length} players)</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase'}}>Squad</div>
+          <div style={{fontSize:11,color:editNation.players.length>=8?C.gold:C.muted}}>{editNation.players.length}/8 · Best of {editNation.name||'this nation'}</div>
+        </div>
         {editNation.players.map(p=>(
           <div key={p.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 12px',marginBottom:6,display:'flex',alignItems:'center',gap:10}}>
             <div style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:4,padding:'2px 6px',fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</div>
@@ -1278,11 +1283,14 @@ function NationsManageView({nations,setNations,teams,intlFixtures,setIntlFixture
             </div>
           </div>
         )}
-        {!addMode&&(
+        {!addMode&&editNation.players.length<8&&(
           <div style={{display:'flex',gap:8,marginTop:12}}>
             <Btn onClick={()=>setAddMode('bmls')} variant="secondary" style={{flex:1,fontSize:12}}>+ From BMLS</Btn>
             <Btn onClick={()=>{setAddMode('new');setNewPlayer({name:'',position:'DEF',score:7,mdfAtkScore:7,mdfDefScore:7,age:25,club:'',injured:false,suspended:false});}} variant="secondary" style={{flex:1,fontSize:12}}>+ New Player</Btn>
           </div>
+        )}
+        {!addMode&&editNation.players.length>=8&&(
+          <div style={{fontSize:11,color:C.gold,textAlign:'center',marginTop:12,fontStyle:'italic'}}>Squad full — 8/8 selected from the national pool</div>
         )}
         <div style={{marginTop:24,paddingTop:16,borderTop:`1px solid ${C.border}`}}>
           <div style={{fontSize:10,color:C.muted,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',marginBottom:10}}>International Fixtures</div>
