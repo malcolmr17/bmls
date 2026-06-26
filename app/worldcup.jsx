@@ -608,7 +608,7 @@ function NationsTab({nations}){
             <div>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.text,letterSpacing:2}}>{sel.name}</div>
               <div style={{display:'flex',gap:8,marginTop:4}}>
-                {(()=>{const r=lineupRatings(sel);return<><span style={{fontSize:11,color:C.red,fontWeight:700}}>ATK {r.atk}</span><span style={{fontSize:11,color:C.green,fontWeight:700}}>DEF {r.def}</span></>;}())()}
+                {(()=>{const r=lineupRatings(sel);return<><span style={{fontSize:11,color:C.red,fontWeight:700}}>ATK {r.atk}</span><span style={{fontSize:11,color:C.green,fontWeight:700}}>DEF {r.def}</span></>;})()}
               </div>
             </div>
           </div>
