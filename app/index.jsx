@@ -867,7 +867,10 @@ function RatingsTab({teams,nations}){
 
   // National data
   const namedNations=nations.filter(n=>n.name&&n.players.length>0).map(n=>({...n,...lineupRatings(n)})).sort((a,b)=>metric==="atk"?b.atk-a.atk:b.def-a.def);
-  const intlPlayers=nations.filter(n=>n.name).flatMap(n=>n.players.filter(p=>p.name).map(p=>({...p,_color:n.color,_crest:n.crest,_short:n.shortName||(n.name?.slice(0,3).toUpperCase()||''),_nation:n})));
+  const intlPlayersRaw=nations.filter(n=>n.name).flatMap(n=>n.players.filter(p=>p.name).map(p=>({...p,_color:n.color,_crest:n.crest,_short:n.shortName||(n.name?.slice(0,3).toUpperCase()||''),_nation:n})));
+  // deduplicate by player id — keep first occurrence (players may appear in multiple nations)
+  const seenIds=new Set();
+  const intlPlayers=intlPlayersRaw.filter(p=>{if(seenIds.has(p.id))return false;seenIds.add(p.id);return true;});
   const intlSorted=[...intlPlayers].map(p=>({...p,val:getPlayerVal(p,metric)})).filter(p=>p.val>0).sort((a,b)=>b.val-a.val);
 
   const ratingTeamRow=(t,i,val,color)=>(
