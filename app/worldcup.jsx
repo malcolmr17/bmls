@@ -88,7 +88,7 @@ function pickWCLineup(nation){
   // How good is player p in a given slot type?
   const slotScore=(p,slot)=>{
     if(slot==='DEF')return p.position==='DEF'&&!p.wide?(p.score||5):p.position==='DEF'&&p.wide?(p.score||5)*0.7:p.position==='MDF'?(p.mdfDefScore||5)*0.6:(p.score||5)*0.2;
-    if(slot==='MDF')return p.position==='MDF'?((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2:p.position==='FWD'?(p.score||5)*0.55:p.position==='DEF'?(p.mdfDefScore||p.score||5)*0.5:(p.score||5)*0.3;
+    if(slot==='MDF')return p.position==='MDF'?((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2:p.position==='FWD'?(p.score||5)*0.55:p.position==='DEF'?(p.score||5)*0.35:(p.score||5)*0.2;
     return p.position==='FWD'?(p.score||5):p.position==='DEF'&&p.wide?(p.score||5)*0.8:p.position==='MDF'?(p.mdfAtkScore||5)*0.65:(p.score||5)*0.2;
   };
 
