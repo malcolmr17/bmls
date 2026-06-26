@@ -853,70 +853,98 @@ function StatsTab({teams,fixtures}){
   );
 }
 
-function RatingsTab({teams}){
+function RatingsTab({teams,nations}){
+  const[mode,setMode]=useState('club');
   const[metric,setMetric]=useState("atk");
-  const teamStats=teams.filter(t=>t.name&&t.players.length>0).map(t=>({...t,...lineupRatings(t)})).sort((a,b)=>metric==="atk"?b.atk-a.atk:b.def-a.def);
-  const getPlayerVal=(p,metric)=>{if(p.position==="GK")return 0;if(metric==="atk"){if(p.position==="FWD")return p.score;if(p.position==="MDF")return p.mdfAtkScore;return 0;}else{if(p.position==="DEF")return p.score;if(p.position==="MDF")return p.mdfDefScore;return 0;}};
-  const allPlayers=teams.flatMap(t=>t.players.filter(p=>p.name).map(p=>({...p,_team:t,teamName:t.name,teamColor:t.color,teamShort:t.shortName||(t.name&&t.name.slice(0,3).toUpperCase())})));
-  const sorted=[...allPlayers].map(p=>({...p,val:getPlayerVal(p,metric)})).filter(p=>p.val>0).sort((a,b)=>b.val-a.val);
-  const valuesSorted=[...allPlayers].map(p=>({...p,tv:playerValue(p,p._team)})).sort((a,b)=>b.tv-a.tv);
+  const getPlayerVal=(p,m)=>{if(p.position==="GK")return 0;if(m==="atk"){if(p.position==="FWD")return p.score;if(p.position==="MDF")return p.mdfAtkScore;return 0;}else{if(p.position==="DEF")return p.score;if(p.position==="MDF")return p.mdfDefScore;return 0;}};
+
+  // Club data
+  const clubTeams=teams.filter(t=>t.name&&t.players.length>0).map(t=>({...t,...lineupRatings(t)})).sort((a,b)=>metric==="atk"?b.atk-a.atk:b.def-a.def);
+  const clubPlayers=teams.flatMap(t=>t.players.filter(p=>p.name).map(p=>({...p,_color:t.color,_crest:t.crest,_short:t.shortName||(t.name?.slice(0,3).toUpperCase()||''),_team:t})));
+  const clubSorted=[...clubPlayers].map(p=>({...p,val:getPlayerVal(p,metric)})).filter(p=>p.val>0).sort((a,b)=>b.val-a.val);
+  const valuesSorted=[...clubPlayers].map(p=>({...p,tv:playerValue(p,p._team)})).sort((a,b)=>b.tv-a.tv);
   const maxTv=valuesSorted[0]?.tv||1;
-  if(allPlayers.length===0)return<Empty icon="🎖️" msg="No players yet." hint="Go to Manage → Teams."/>;
+
+  // National data
+  const namedNations=nations.filter(n=>n.name&&n.players.length>0).map(n=>({...n,...lineupRatings(n)})).sort((a,b)=>metric==="atk"?b.atk-a.atk:b.def-a.def);
+  const intlPlayers=nations.filter(n=>n.name).flatMap(n=>n.players.filter(p=>p.name).map(p=>({...p,_color:n.color,_crest:n.crest,_short:n.shortName||(n.name?.slice(0,3).toUpperCase()||''),_nation:n})));
+  const intlSorted=[...intlPlayers].map(p=>({...p,val:getPlayerVal(p,metric)})).filter(p=>p.val>0).sort((a,b)=>b.val-a.val);
+
+  const TeamRow=({t,i,val,color})=>(
+    <div style={{background:C.card,borderRadius:8,padding:"10px 14px",marginBottom:7}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
+        <span style={{fontSize:12,color:C.muted,minWidth:20}}>#{i+1}</span>
+        <TeamBadge color={t.color} crest={t.crest} size={20}/>
+        <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color,minWidth:36,textAlign:"right"}}>{val||"—"}</span>
+      </div>
+      <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{width:`${((val||0)/10)*100}%`,height:"100%",background:color,borderRadius:2}}/></div>
+    </div>
+  );
+  const PlayerRow=({p,i,color})=>(
+    <div style={{background:C.card,borderRadius:8,padding:"10px 14px",marginBottom:7}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
+        <span style={{fontSize:12,color:C.muted,minWidth:20}}>#{i+1}</span>
+        <TeamBadge color={p._color} crest={p._crest} size={18}/>
+        <span style={{fontSize:14,fontWeight:600,color:C.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+        <span style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</span>
+        <span style={{fontSize:11,color:C.muted,flexShrink:0}}>{p._short}</span>
+        <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color,minWidth:36,textAlign:"right"}}>{p.val}</span>
+      </div>
+      <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{width:`${(p.val/10)*100}%`,height:"100%",background:color,borderRadius:2}}/></div>
+    </div>
+  );
+
+  if(clubPlayers.length===0)return<Empty icon="🎖️" msg="No players yet." hint="Go to Manage → Teams."/>;
   return(
     <div>
+      <div style={{display:'flex',gap:4,marginBottom:16,background:C.surface,borderRadius:8,padding:4,border:`1px solid ${C.border}`}}>
+        <button onClick={()=>setMode('club')} style={{flex:1,background:mode==='club'?C.card:'transparent',color:mode==='club'?C.text:C.muted,border:'none',borderRadius:6,padding:'7px 0',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>Club</button>
+        <button onClick={()=>{setMode('national');if(metric==='val')setMetric('atk');}} style={{flex:1,background:mode==='national'?C.card:'transparent',color:mode==='national'?C.text:C.muted,border:'none',borderRadius:6,padding:'7px 0',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'DM Sans',sans-serif"}}>🌍 National</button>
+      </div>
       <div style={{display:"flex",gap:8,marginBottom:20}}>
-        {[{key:"atk",label:"Attack",color:C.red},{key:"def",label:"Defense",color:C.green},{key:"val",label:"Values",color:C.gold}].map(m=>(
-          <button key={m.key} onClick={()=>setMetric(m.key)} style={{background:metric===m.key?m.color:C.card,color:metric===m.key?"#000":C.sub,border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{m.label}</button>
+        {[{key:"atk",label:"Attack",color:C.red},{key:"def",label:"Defense",color:C.green},...(mode==='club'?[{key:"val",label:"Values",color:C.gold}]:[])].map(m=>(
+          <button key={m.key} onClick={()=>setMetric(m.key)} style={{background:metric===m.key?m.color:C.card,color:metric===m.key?'#000':C.sub,border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{m.label}</button>
         ))}
       </div>
-      {metric==="val"?(
+
+      {mode==='club'&&metric==='val'&&(
         <div>
           <SLabel>Transfer Values</SLabel>
           {valuesSorted.map((p,i)=>(
             <div key={p.id} style={{background:C.card,borderRadius:8,padding:"10px 14px",marginBottom:7}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
                 <span style={{fontSize:12,color:C.muted,minWidth:20}}>#{i+1}</span>
-                <span style={{width:8,height:8,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
-                <span style={{fontSize:14,fontWeight:600,color:C.text,flex:1}}>{p.name}</span>
-                <span style={{fontSize:10,color:C.muted}}>Age {p.age||25}</span>
-                <span style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700}}>{p.position}</span>
-                <span style={{fontSize:11,color:C.muted}}>{p.teamShort}</span>
+                <TeamBadge color={p._color} crest={p._crest} size={18}/>
+                <span style={{fontSize:14,fontWeight:600,color:C.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                <span style={{fontSize:10,color:C.muted,flexShrink:0}}>Age {p.age||25}</span>
+                <span style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</span>
                 <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.gold,minWidth:52,textAlign:"right"}}>£{p.tv}M</span>
               </div>
               <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{width:`${(p.tv/maxTv)*100}%`,height:"100%",background:C.gold,borderRadius:2}}/></div>
             </div>
           ))}
         </div>
-      ):(
+      )}
+
+      {mode==='club'&&metric!=='val'&&(
         <div>
-          <SLabel>Team Rankings</SLabel>
-          <div style={{marginBottom:24}}>
-            {teamStats.map((t,i)=>{const val=metric==="atk"?t.atk:t.def,color=metric==="atk"?C.red:C.green;return(
-              <div key={t.id} style={{background:C.card,borderRadius:8,padding:"10px 14px",marginBottom:7}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
-                  <span style={{fontSize:12,color:C.muted,minWidth:20}}>#{i+1}</span>
-                  <TeamBadge color={t.color} crest={t.crest} size={20}/>
-                  <span style={{fontSize:13,fontWeight:600,color:C.text,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color,minWidth:36,textAlign:"right"}}>{val||"—"}</span>
-                </div>
-                <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{width:`${((val||0)/10)*100}%`,height:"100%",background:color,borderRadius:2}}/></div>
-              </div>
-            );})}
-          </div>
+          <SLabel>Club Rankings</SLabel>
+          <div style={{marginBottom:24}}>{clubTeams.map((t,i)=><TeamRow key={t.id} t={t} i={i} val={metric==="atk"?t.atk:t.def} color={metric==="atk"?C.red:C.green}/>)}</div>
           <SLabel>Top Players</SLabel>
-          {sorted.slice(0,20).map((p,i)=>{const color=metric==="atk"?C.red:C.green;return(
-            <div key={p.id} style={{background:C.card,borderRadius:8,padding:"10px 14px",marginBottom:7}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:5}}>
-                <span style={{fontSize:12,color:C.muted,minWidth:20}}>#{i+1}</span>
-                <span style={{width:8,height:8,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
-                <span style={{fontSize:14,fontWeight:600,color:C.text,flex:1}}>{p.name}</span>
-                <span style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700}}>{p.position}</span>
-                <span style={{fontSize:11,color:C.muted}}>{p.teamShort}</span>
-                <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color,minWidth:36,textAlign:"right"}}>{p.val}</span>
-              </div>
-              <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}><div style={{width:`${(p.val/10)*100}%`,height:"100%",background:color,borderRadius:2}}/></div>
-            </div>
-          );})}
+          {clubSorted.slice(0,20).map((p,i)=><PlayerRow key={p.id} p={p} i={i} color={metric==="atk"?C.red:C.green}/>)}
+        </div>
+      )}
+
+      {mode==='national'&&(
+        <div>
+          {namedNations.length===0&&<Empty icon="🌍" msg="No nations set up yet." hint="Go to Manage → Nations."/>}
+          {namedNations.length>0&&<>
+            <SLabel>Nation Rankings</SLabel>
+            <div style={{marginBottom:24}}>{namedNations.map((t,i)=><TeamRow key={t.id} t={t} i={i} val={metric==="atk"?t.atk:t.def} color={metric==="atk"?C.red:C.green}/>)}</div>
+            <SLabel>Top Players</SLabel>
+            {intlSorted.slice(0,20).map((p,i)=><PlayerRow key={p.id} p={p} i={i} color={metric==="atk"?C.red:C.green}/>)}
+          </>}
         </div>
       )}
     </div>
@@ -1022,41 +1050,62 @@ function SquadsTab({teams,fixtures,nations}){
             ))}
           </div>
           {!nation&&<Empty icon="👆" msg="Select a nation above." hint=""/>}
-          {nation&&<div>
-            <div style={{background:`${nation.color}22`,border:`2px solid ${nation.color}44`,borderRadius:10,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:14}}>
-              <TeamBadge color={nation.color} crest={nation.crest} size={52}/>
-              <div>
-                <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.text,letterSpacing:2}}>{nation.name}</div>
-                <div style={{fontSize:11,color:C.muted,marginTop:2}}>Best of {nation.name} · {nation.players.length}/8</div>
-              </div>
-            </div>
-            {["GK","DEF","MDF","FWD"].map(pos=>{
-              const posPlayers=nation.players.filter(p=>p.position===pos);
-              if(posPlayers.length===0)return null;
-              const posLabel=pos==="GK"?"Goalkeeper":pos==="DEF"?"Defenders":pos==="MDF"?"Midfielders":"Forwards";
-              return(
-                <div key={pos} style={{marginBottom:16}}>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:posColor(pos),textTransform:"uppercase",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{width:6,height:6,borderRadius:"50%",background:posColor(pos),display:"inline-block"}}/>{posLabel}
-                  </div>
-                  {posPlayers.map(p=>{
-                    const isGK=p.position==="GK";
-                    const scoreLabel=isGK?"GK":p.position==="MDF"?`ATK ${p.mdfAtkScore} · DEF ${p.mdfDefScore}`:`${p.position==="FWD"?"ATK":"DEF"} ${p.score}`;
-                    return(
-                      <div key={p.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"11px 14px",marginBottom:7,display:"flex",alignItems:"center",gap:12}}>
-                        <div style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:5,padding:"3px 7px",fontSize:10,fontWeight:700,minWidth:36,textAlign:"center",flexShrink:0}}>{p.position}</div>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:14,fontWeight:600,color:C.text}}>{p.name||"Unnamed"}</div>
-                          <div style={{fontSize:11,color:C.muted,marginTop:2}}>{p.club?`${p.club} · `:'B Team · '}{scoreLabel}</div>
-                        </div>
-                      </div>
-                    );
-                  })}
+          {nation&&(()=>{const nr=lineupRatings(nation);return(
+            <div>
+              <div style={{background:`${nation.color}22`,border:`2px solid ${nation.color}44`,borderRadius:10,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:14}}>
+                <TeamBadge color={nation.color} crest={nation.crest} size={52}/>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.text,letterSpacing:2}}>{nation.name}</div>
+                  <div style={{fontSize:11,color:C.muted,marginTop:2}}>Best of {nation.name} · {nation.players.length}/8</div>
                 </div>
-              );
-            })}
-            {nation.players.length===0&&<Empty icon="👤" msg="No players in this squad yet." hint="Go to Manage → Nations to add players."/>}
-          </div>}
+                <div style={{display:'flex',gap:18}}>
+                  <div style={{textAlign:'center'}}>
+                    <div style={{fontSize:9,color:C.red,letterSpacing:2,textTransform:'uppercase',marginBottom:2}}>Attack</div>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.red,lineHeight:1}}>{nr.atk||"—"}</div>
+                  </div>
+                  <div style={{textAlign:'center'}}>
+                    <div style={{fontSize:9,color:C.green,letterSpacing:2,textTransform:'uppercase',marginBottom:2}}>Defense</div>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:26,color:C.green,lineHeight:1}}>{nr.def||"—"}</div>
+                  </div>
+                </div>
+              </div>
+              {["GK","DEF","MDF","FWD"].map(pos=>{
+                const posPlayers=nation.players.filter(p=>p.position===pos);
+                if(posPlayers.length===0)return null;
+                const posLabel=pos==="GK"?"Goalkeeper":pos==="DEF"?"Defenders":pos==="MDF"?"Midfielders":"Forwards";
+                return(
+                  <div key={pos} style={{marginBottom:16}}>
+                    <div style={{fontSize:10,fontWeight:700,letterSpacing:2,color:posColor(pos),textTransform:"uppercase",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:posColor(pos),display:"inline-block"}}/>{posLabel}
+                    </div>
+                    {posPlayers.map(p=>{
+                      const isGK=p.position==="GK";
+                      const mainScore=isGK?null:p.position==="MDF"?null:p.score;
+                      const scoreColor=p.position==="FWD"?C.red:p.position==="DEF"?C.green:C.muted;
+                      return(
+                        <div key={p.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:"11px 14px",marginBottom:7,display:"flex",alignItems:"center",gap:12}}>
+                          <div style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:5,padding:"3px 7px",fontSize:10,fontWeight:700,minWidth:36,textAlign:"center",flexShrink:0}}>{p.position}</div>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:14,fontWeight:600,color:C.text}}>{p.name||"Unnamed"}</div>
+                            <div style={{fontSize:11,color:C.muted,marginTop:2}}>{p.club||'B Team'}</div>
+                          </div>
+                          {isGK&&<span style={{fontSize:11,color:C.muted}}>GK</span>}
+                          {p.position==="MDF"&&<>
+                            <span style={{fontSize:10,color:C.muted}}>ATK</span>
+                            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.red}}>{p.mdfAtkScore}</span>
+                            <span style={{fontSize:10,color:C.muted}}>DEF</span>
+                            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.green}}>{p.mdfDefScore}</span>
+                          </>}
+                          {mainScore!=null&&<span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:scoreColor}}>{mainScore}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+              {nation.players.length===0&&<Empty icon="👤" msg="No players in this squad yet." hint="Go to Manage → Nations to add players."/>}
+            </div>
+          );})()}
         </>}
       </>}
     </div>
@@ -4010,7 +4059,7 @@ function App(){
         }}/>}
         {tab==="table"   &&<TableTab teams={teams} fixtures={fixtures}/>}
         {tab==="stats"   &&<StatsTab teams={teams} fixtures={fixtures}/>}
-        {tab==="ratings" &&<RatingsTab teams={teams}/>}
+        {tab==="ratings" &&<RatingsTab teams={teams} nations={nations}/>}
         {tab==="squads"    &&<SquadsTab teams={teams} fixtures={fixtures} nations={nations}/>}
         {tab==="transfers" &&<TransfersTab transfers={transfers} teams={teams}/>}
         {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek}/>}
