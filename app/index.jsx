@@ -208,8 +208,11 @@ function predictMatch(home,away){
   const h=lineupRatings(home),a=lineupRatings(away);
   const hxg=+((1.25*(h.atk+0.4)/Math.max(a.def,0.5))*0.85).toFixed(1);
   const axg=+((1.25*a.atk/Math.max(h.def,0.5))*0.85).toFixed(1);
-  const xgToGoals=xg=>Math.max(0,Math.round(xg*1.18-0.12));
-  return{hxg,axg,hGoals:xgToGoals(hxg),aGoals:xgToGoals(axg)};
+  const diff=hxg-axg;
+  const hBoost=diff>0?1+Math.max(0,diff-0.4)*0.22:1;
+  const aBoost=diff<0?1+Math.max(0,-diff-0.4)*0.22:1;
+  const xgToGoals=xg=>Math.max(0,Math.round(xg*1.20-0.10));
+  return{hxg,axg,hGoals:xgToGoals(hxg*hBoost),aGoals:xgToGoals(axg*aBoost)};
 }
 
 function simulateMatch(home,away,fixtures){
