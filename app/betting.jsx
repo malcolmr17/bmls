@@ -114,10 +114,30 @@ function fantasyPlayerCost(p,settings=DEFAULT_SETTINGS){
   return p.score||5;
 }
 
-function calcFantasyPoints(fantasyPlayerIds,teams,fixtures,settings=DEFAULT_SETTINGS){
+function scorePlayer(pid,player,mwF,pts,top5){
+  let score=0;
+  mwF.forEach(f=>{
+    const isHome=f.homeId===player.teamId,isAway=f.awayId===player.teamId;
+    if(!isHome&&!isAway)return;
+    const ps=(f.playerStats||[]).find(s=>s.playerId===pid);if(!ps)return;
+    score+=pts.appearance;
+    const result=isHome?(f.homeScore>f.awayScore?'win':f.homeScore<f.awayScore?'loss':'draw'):(f.awayScore>f.homeScore?'win':f.awayScore<f.homeScore?'loss':'draw');
+    const rating=calcMatchRating(ps,player.position,result);
+    score+=(ps.goals||0)*pts.goal+(ps.assists||0)*pts.assist;
+    if((player.position==='GK'||player.position==='DEF')&&((isHome&&f.awayScore===0)||(isAway&&f.homeScore===0)))score+=pts.gkCleanSheet;
+    if(player.position==='GK'&&ps.penSaves)score+=ps.penSaves*(pts.penSave??5);
+    if(ps.yellowCards)score+=ps.yellowCards*pts.yellow;
+    if(ps.redCard)score+=pts.red;
+    if(rating>=8)score+=pts.ratingHigh;else if(rating<=4)score+=pts.ratingLow;
+    if(top5.has(pid))score+=(pts.mwTopBonus??2);
+  });
+  return score;
+}
+
+function calcFantasyPoints(fantasySquad,fantasyHistory,teams,fixtures,settings=DEFAULT_SETTINGS){
   const pts=settings.points||DEFAULT_SETTINGS.points;
   const allPlayers={};
-  teams.forEach(t=>t.players.forEach(p=>{allPlayers[p.id]={...p,teamId:t.id,teamName:t.name,team:t};}));
+  teams.forEach(t=>t.players.forEach(p=>{allPlayers[p.id]={...p,teamId:t.id,teamName:t.name};}));
   const byMW={};
   fixtures.filter(f=>f.played).forEach(f=>{
     const mw=f.matchWeek||0;
@@ -126,8 +146,16 @@ function calcFantasyPoints(fantasyPlayerIds,teams,fixtures,settings=DEFAULT_SETT
   });
   let totalPoints=0;
   const breakdown=[];
+  const squad=fantasySquad||[];
+  const history=fantasyHistory||{};
   Object.entries(byMW).forEach(([mw,mwF])=>{
-    // Build top-5 rated players across ALL players in this MW
+    const hist=history[String(mw)]||{};
+    const starting=hist.starting&&hist.starting.length>0?hist.starting:squad;
+    const captain=hist.captain||null;
+    const boostUsed=hist.boostUsed||null;
+    const deduction=hist.transferDeduction||0;
+    const scoringIds=boostUsed==='benchBoost'?squad:starting;
+
     const mwRatings=[];
     mwF.forEach(f=>{
       (f.playerStats||[]).forEach(ps=>{
@@ -140,28 +168,18 @@ function calcFantasyPoints(fantasyPlayerIds,teams,fixtures,settings=DEFAULT_SETT
     const top5=new Set(mwRatings.sort((a,b)=>b.rating-a.rating).slice(0,5).map(r=>r.playerId));
 
     let mwPts=0;const details=[];
-    fantasyPlayerIds.forEach(pid=>{
+    scoringIds.forEach(pid=>{
       const player=allPlayers[pid];if(!player)return;
-      mwF.forEach(f=>{
-        const isHome=f.homeId===player.teamId,isAway=f.awayId===player.teamId;
-        if(!isHome&&!isAway)return;
-        const ps=(f.playerStats||[]).find(s=>s.playerId===pid);if(!ps)return;
-        let score=pts.appearance;
-        const result=isHome?(f.homeScore>f.awayScore?'win':f.homeScore<f.awayScore?'loss':'draw'):(f.awayScore>f.homeScore?'win':f.awayScore<f.homeScore?'loss':'draw');
-        const rating=calcMatchRating(ps,player.position,result);
-        score+=(ps.goals||0)*pts.goal+(ps.assists||0)*pts.assist;
-        if((player.position==='GK'||player.position==='DEF')&&((isHome&&f.awayScore===0)||(isAway&&f.homeScore===0)))score+=pts.gkCleanSheet;
-        if(player.position==='GK'&&ps.penSaves)score+=ps.penSaves*(pts.penSave??5);
-        if(ps.yellowCards)score+=ps.yellowCards*pts.yellow;
-        if(ps.redCard)score+=pts.red;
-        if(rating>=8)score+=pts.ratingHigh;else if(rating<=4)score+=pts.ratingLow;
-        if(top5.has(pid))score+=(pts.mwTopBonus??2);
-        mwPts+=score;
-        details.push({playerName:player.name,pts:score,goals:ps.goals||0,assists:ps.assists||0,rating,topRated:top5.has(pid)});
-      });
+      let score=scorePlayer(pid,player,mwF,pts,top5);
+      if(score===0)return;
+      const captainMult=pid===captain?(boostUsed==='tripleCaptain'?3:2):1;
+      const finalScore=score*captainMult;
+      mwPts+=finalScore;
+      details.push({playerName:player.name,pts:finalScore,isCaptain:pid===captain,captainMult,topRated:top5.has(pid)});
     });
+    mwPts-=deduction;
     totalPoints+=mwPts;
-    breakdown.push({mw:+mw,pts:mwPts,details});
+    breakdown.push({mw:+mw,pts:mwPts,details,deduction,boostUsed,captain:allPlayers[captain]?.name});
   });
   return{totalPoints,breakdown:breakdown.sort((a,b)=>a.mw-b.mw)};
 }
@@ -211,7 +229,7 @@ function UsernameScreen({allUsers,onLogin}){
     if(!valid){setErr('3–20 chars, letters/numbers/underscores only');return;}
     const existing=allUsers.find(u=>u.username.toLowerCase()===name.toLowerCase());
     if(existing){onLogin(existing,false);}
-    else{onLogin({id:`betting_user_${name.toLowerCase()}`,type:'betting_user',username:name.toLowerCase(),balance:100,bets:[],leagueName:null,fantasyPlayerIds:[],fantasyLockedMW:null,fantasyPointsHistory:[],lastResetHighestMW:0},true);}
+    else{onLogin({id:`betting_user_${name.toLowerCase()}`,type:'betting_user',username:name.toLowerCase(),balance:100,bets:[],leagueName:null,fantasySquad:[],fantasyHistory:{},freeTransfers:1,boostsAvailable:{benchBoost:true,tripleCaptain:true,wildcard:true},lastResetHighestMW:0},true);}
   };
   return(
     <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
@@ -623,7 +641,7 @@ function LeaderboardTab({leagueData,allUserRecords,teams,fixtures,settings=DEFAU
     const rec=allUserRecords.find(r=>r.username===u);
     if(!rec)return{username:u,balance:100,fantasyPoints:0,betsWon:0,betsTotal:0};
     const bets=rec.bets||[];
-    const{totalPoints}=calcFantasyPoints(rec.fantasyPlayerIds||[],teams,fixtures,settings);
+    const{totalPoints}=calcFantasyPoints(rec.fantasySquad||rec.fantasyPlayerIds||[],rec.fantasyHistory||{},teams,fixtures,settings);
     return{username:u,balance:rec.balance,fantasyPoints:totalPoints,betsWon:bets.filter(b=>b.status==='won').length,betsTotal:bets.filter(b=>b.status!=='open').length};
   }).sort((a,b)=>b.fantasyPoints-a.fantasyPoints||b.balance-a.balance);
 
@@ -775,7 +793,7 @@ function BettingApp(){
         const maxMW=data.fixtures.filter(f=>f.matchWeek!=null).reduce((m,f)=>Math.max(m,f.matchWeek),0);
         if(existing.lastResetHighestMW>0&&maxMW<existing.lastResetHighestMW-2){
           // New season detected — reset balance
-          const reset={...existing,balance:100,bets:[],fantasyPlayerIds:[],fantasyLockedMW:null,fantasyPointsHistory:[],lastResetHighestMW:maxMW};
+          const reset={...existing,balance:100,bets:[],fantasySquad:[],fantasyHistory:{},freeTransfers:1,boostsAvailable:{benchBoost:true,tripleCaptain:true,wildcard:true},lastResetHighestMW:maxMW};
           await saveRecord(reset.id,reset);
           setUserData(reset);
           setSeasonReset(true);
@@ -860,11 +878,10 @@ function BettingApp(){
     setSettings({...DEFAULT_SETTINGS,...newSettings,points:{...DEFAULT_SETTINGS.points,...newSettings.points}});
   };
 
-  const handleSaveFantasy=async(playerIds,mw)=>{
-    const updated={...userData,fantasyPlayerIds:playerIds,fantasyLockedMW:mw};
+  const handleSaveFantasy=async({squad,history,freeTransfers,boostsAvailable})=>{
+    const updated={...userData,fantasySquad:squad,fantasyHistory:history,freeTransfers,boostsAvailable};
     setUserData(updated);
     await saveRecord(updated.id,updated);
-    // Refresh allUserRecords so leaderboard is up to date
     const data=await loadBMLSState();
     setAllUserRecords(data.fixtures.filter(f=>f.type==='betting_user'));
   };
