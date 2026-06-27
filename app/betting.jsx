@@ -3,6 +3,7 @@ import{createRoot}from 'react-dom/client'
 
 const C={bg:"#0a0e1a",card:"#111827",surface:"#1E293B",border:"#1E293B",accent:"#3B82F6",gold:"#F59E0B",green:"#22c55e",red:"#ef4444",purple:"#A855F7",muted:"#64748B",sub:"#94A3B8",text:"#E2E8F0",white:"#F8FAFC"};
 const posColor=p=>p==='GK'?C.purple:p==='DEF'?C.accent:p==='MDF'?'#f97316':C.red;
+const isLight=hex=>{if(!hex||hex[0]!=='#')return false;const h=hex.replace('#','');const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);return(r*299+g*587+b*114)/1000>140;};
 
 // ── pure helpers ──────────────────────────────────────────────────────────────
 
@@ -655,7 +656,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
           >
             {empty
               ?<span style={{fontSize:26,lineHeight:1,color:isActive?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.45)",fontWeight:300}}>+</span>
-              :<span style={{fontSize:8,fontWeight:700,color:"#fff"}}>{player.position}</span>
+              :<span style={{fontSize:8,fontWeight:700,color:isLight(player.teamColor||'')?"#000":"#fff"}}>{player.position}</span>
             }
             {!empty&&<div style={{position:"absolute",top:-2,right:-2,width:16,height:16,borderRadius:"50%",background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"rgba(255,255,255,0.8)",fontWeight:700}}>×</div>}
           </div>
