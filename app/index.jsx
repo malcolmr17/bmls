@@ -830,19 +830,22 @@ function StatsTab({teams,fixtures}){
   const scoreBasedProj=useMemo(()=>teams.flatMap(t=>{
     const teamGpg=Math.max(0.4,lineupRatings(t).atk/10*1.4+0.3);
     const variance=id=>{const h=Math.abs(Math.round(id||0))%37;return 0.82+h*0.0097;};
+    const lu=predictedLineup(t,fixtures);
+    const starterIds=new Set([...(lu.starters||[]).map(p=>p.id),lu.gk?.id].filter(Boolean));
     return t.players.filter(p=>p.name).map(p=>{
       const pos=(p.position||'').trim();
       const sc=(p.score||5)/10,atk=(p.mdfAtkScore||p.score||5)/10;
       const wide=p.wide||false;
       const v=variance(p.id);
-      const gShare=pos==='FWD'?sc*0.55:pos==='MDF'?atk*0.20:pos==='DEF'?(wide?sc*0.13:sc*0.04):0;
-      const aShare=pos==='FWD'?sc*0.24:pos==='MDF'?atk*0.42:pos==='DEF'?(wide?sc*0.11:sc*0.06):0;
+      const appRate=starterIds.has(p.id)?0.80:0.28;
+      const gShare=pos==='FWD'?sc*0.38:pos==='MDF'?atk*0.15:pos==='DEF'?(wide?sc*0.10:sc*0.03):0;
+      const aShare=pos==='FWD'?sc*0.18:pos==='MDF'?atk*0.32:pos==='DEF'?(wide?sc*0.09:sc*0.05):0;
       return{playerId:p.id,name:p.name,position:pos,teamId:t.id,teamName:t.name,teamColor:t.color,
-        goals:Math.round(teamGpg*gShare*v*gamesPerTeam),
-        assists:Math.round(teamGpg*aShare*v*gamesPerTeam),
+        goals:Math.round(teamGpg*gShare*appRate*v*gamesPerTeam),
+        assists:Math.round(teamGpg*aShare*appRate*v*gamesPerTeam),
         avgRating:null,cleanSheets:0,yellowCards:0,redCard:false,apps:0};
     });
-  }),[teams,gamesPerTeam]);
+  }),[teams,fixtures,gamesPerTeam]);
   const projectedStats=playedCount===0?scoreBasedProj:playerStats.map(p=>{
     const tp=teamPlayed[p.teamId]||0;
     const rem=Math.max(0,gamesPerTeam-tp);
