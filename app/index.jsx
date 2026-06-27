@@ -26,7 +26,7 @@ const ROLES=[
 ];
 
 const makeTeam=id=>({id,name:"",shortName:"",color:"#3B82F6",crest:null,players:[],formation:"2-2-1",budget:0});
-const makePlayer=()=>({id:Date.now()+Math.random(),name:"",position:"DEF",score:7,mdfAtkScore:7,mdfDefScore:7,age:25,injured:false,suspended:false,wide:false,altPosition:null,roles:[]});
+const makePlayer=()=>({id:Date.now()+Math.random(),name:"",position:"DEF",score:7,mdfAtkScore:7,mdfDefScore:7,age:25,country:"",injured:false,suspended:false,wide:false,altPosition:null,roles:[]});
 const makeFixture=()=>({id:String(Date.now()+Math.random()),homeId:null,awayId:null,date:"",homeScore:null,awayScore:null,played:false,playerStats:[],matchWeek:null});
 
 function generateSeason(namedTeams){
@@ -497,17 +497,19 @@ function PredLineup({team,fixtures,side="left"}){
       {rows.map((row,ri)=>(
         <div key={ri} style={{display:"flex",justifyContent:side==="right"?"flex-end":"flex-start",gap:4,marginBottom:4,flexWrap:"wrap"}}>
           {row.map(p=>(
-            <div key={p.id} style={{background:posColor(p.position)+"22",border:`1px solid ${posColor(p.position)}44`,borderRadius:5,padding:"2px 6px",textAlign:"center"}}>
+            <div key={p.id} style={{background:posColor(p.position)+"22",border:`1px solid ${posColor(p.position)}44`,borderRadius:5,padding:"2px 6px",textAlign:"center",minWidth:58}}>
               <div style={{fontSize:9,color:posColor(p.position),fontWeight:700}}>{p.wide?"W-":""}{p.position}{p.altPosition?`/${p.altPosition}`:""}</div>
-              <div style={{fontSize:10,color:C.text,fontWeight:600,whiteSpace:"nowrap",maxWidth:60,overflow:"hidden",textOverflow:"ellipsis"}}>{p.name||"?"}</div>
+              <div style={{fontSize:10,color:C.text,fontWeight:600,whiteSpace:"nowrap",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis"}}>{p.name||"?"}</div>
+              <div style={{fontSize:8,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:70}}>{p.age||25}{p.country?` · ${p.country}`:""}</div>
             </div>
           ))}
         </div>
       ))}
       {gk&&<div style={{display:"flex",justifyContent:side==="right"?"flex-end":"flex-start",marginTop:2}}>
-        <div style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:"2px 6px"}}>
+        <div style={{background:`${C.gold}22`,border:`1px solid ${C.gold}44`,borderRadius:5,padding:"2px 6px",minWidth:58}}>
           <div style={{fontSize:9,color:C.gold,fontWeight:700}}>GK</div>
-          <div style={{fontSize:10,color:C.text,fontWeight:600,whiteSpace:"nowrap",maxWidth:60,overflow:"hidden",textOverflow:"ellipsis"}}>{gk.name||"?"}</div>
+          <div style={{fontSize:10,color:C.text,fontWeight:600,whiteSpace:"nowrap",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis"}}>{gk.name||"?"}</div>
+          <div style={{fontSize:8,color:C.muted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:70}}>{gk.age||25}{gk.country?` · ${gk.country}`:""}</div>
         </div>
       </div>}
     </div>
@@ -1329,6 +1331,10 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
                   <input type="range" min="16" max="40" step="1" value={p.age||25} onChange={e=>updPlayer(editTeam,p.id,"age",+e.target.value)} style={{width:100,accentColor:C.accent}}/>
                   <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:24,color:C.accent,minWidth:28,textAlign:"center"}}>{p.age||25}</div>
                 </div>
+              </div>
+              <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:10,color:C.muted,flex:1}}>Country</span>
+                <input value={p.country||""} onChange={e=>updPlayer(editTeam,p.id,"country",e.target.value)} placeholder="e.g. England" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:130}}/>
               </div>
             </div>
           ))}
