@@ -942,14 +942,15 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
           recentMWs.forEach(mw=>{if(byMW[mw])recent+=scorePlayer(p.id,{...p,teamId:teams.find(t=>t.players.some(pl=>pl.id===p.id))?.id},byMW[mw],pts,mwTop5[mw]||new Set());});
           return{...p,recentPts:recent};
         }).filter(p=>p.recentPts>0).sort((a,b)=>b.recentPts-a.recentPts).slice(0,5);
-        const TipCard=({p,badge,badgeColor,stat,statLabel})=>(
+        const rawRating=p=>p.position==='MDF'?((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2:(p.score||5);
+        const TipCard=({p,badge,badgeColor,stat,statLabel,sub})=>(
           <div style={{display:"flex",alignItems:"center",gap:10,background:C.surface,borderRadius:8,padding:"10px 12px",marginBottom:6}}>
             <div style={{width:36,height:36,borderRadius:"50%",background:p.teamColor||C.accent,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <span style={{fontSize:8,fontWeight:700,color:isLight(p.teamColor||'')?'#000':'#fff'}}>{p.position}</span>
             </div>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
-              <div style={{fontSize:10,color:C.muted}}>{p.teamName} · {p.cost}cr</div>
+              <div style={{fontSize:10,color:C.muted}}>{p.teamName} · {p.cost}cr{sub?` · ${sub}`:''}</div>
             </div>
             <div style={{textAlign:"right",flexShrink:0}}>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:18,color:badgeColor}}>{stat}</div>
@@ -958,9 +959,62 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
             <div style={{background:badgeColor+'22',color:badgeColor,borderRadius:4,padding:"2px 6px",fontSize:9,fontWeight:700,flexShrink:0}}>{badge}</div>
           </div>
         );
+        // Pre-season tips (no match data yet)
+        if(withData.length===0){
+          // Best value by rating/cost per position
+          const valueByPos={};
+          ['GK','DEF','MDF','FWD'].forEach(pos=>{
+            valueByPos[pos]=allPlayers.filter(p=>p.position===pos).map(p=>({...p,valuePer:rawRating(p)/p.cost})).sort((a,b)=>b.valuePer-a.valuePer).slice(0,3);
+          });
+          // Greedy optimal squad within budget
+          const greedySquad=[];
+          let rem=BUDGET;
+          ['FWD','MDF','DEF','GK'].forEach(pos=>{
+            const sorted=allPlayers.filter(p=>p.position===pos).sort((a,b)=>rawRating(b)-rawRating(a));
+            let count=0;
+            for(const p of sorted){
+              if(count>=REQUIRED[pos])break;
+              if(p.cost<=rem){greedySquad.push(p);rem-=p.cost;count++;}
+            }
+          });
+          const greedyCost=BUDGET-rem;
+          return(
+            <div>
+              {greedySquad.length>0&&(
+                <div style={{marginBottom:20}}>
+                  <SLabel>⭐ Suggested Starting Squad</SLabel>
+                  <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Best 9 players by rating within the {BUDGET}cr budget · Total cost: {greedyCost}cr · {rem}cr remaining</div>
+                  {['GK','DEF','MDF','FWD'].map(pos=>(
+                    <div key={pos}>
+                      {greedySquad.filter(p=>p.position===pos).map(p=>(
+                        <TipCard key={p.id} p={p} badge={pos} badgeColor={posColor(pos)} stat={rawRating(p).toFixed(1)} statLabel="rating" sub={`${rem+greedySquad.filter(q=>q.position===pos&&q.id!==p.id).reduce((s,q)=>s+q.cost,0)+p.cost}cr slot`}/>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{marginBottom:20}}>
+                <SLabel>🔥 Best Value by Position</SLabel>
+                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Highest rating per credit — steals at their price</div>
+                {['GK','DEF','MDF','FWD'].map(pos=>(
+                  <div key={pos} style={{marginBottom:12}}>
+                    <div style={{fontSize:9,fontWeight:700,color:posColor(pos),letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>{pos}</div>
+                    {valueByPos[pos].map(p=><TipCard key={p.id} p={p} badge="VALUE" badgeColor={C.green} stat={`${p.valuePer.toFixed(2)}`} statLabel="rating/cr"/>)}
+                  </div>
+                ))}
+              </div>
+              <div style={{marginBottom:20}}>
+                <SLabel>⚠️ Overpriced to Watch Out For</SLabel>
+                <div style={{fontSize:11,color:C.muted,marginBottom:10}}>High cost players with ratings that don't justify the price</div>
+                {allPlayers.filter(p=>p.cost>=7).map(p=>({...p,valuePer:rawRating(p)/p.cost})).sort((a,b)=>a.valuePer-b.valuePer).slice(0,5).map(p=>(
+                  <TipCard key={p.id} p={p} badge="PRICEY" badgeColor={C.red} stat={rawRating(p).toFixed(1)} statLabel="rating"/>
+                ))}
+              </div>
+            </div>
+          );
+        }
         return(
           <div>
-            {withData.length===0&&<div style={{textAlign:"center",color:C.muted,fontSize:12,padding:40}}>Tips will appear once matchweeks have been played.</div>}
             {steals.length>0&&(
               <div style={{marginBottom:20}}>
                 <SLabel>🔥 Best Value Picks</SLabel>
