@@ -3674,8 +3674,26 @@ function App(){
   const[activeMatchWeek,setActiveMatchWeek]=useState(1);
   const[profilePlayer,setProfilePlayer]=useState(null);
   useEffect(()=>{
-    loadState().then(data=>{
-      setTeams(data?.teams?.length?data.teams:Array.from({length:12},(_,i)=>makeTeam(i+1)));
+    loadState().then(async data=>{
+      let teams=data?.teams?.length?data.teams:Array.from({length:12},(_,i)=>makeTeam(i+1));
+      // Auto-stamp country from WC nations by player name match (one-time migration)
+      try{
+        const raw=await fetch('/api/state').then(r=>r.json());
+        const nationsRec=(raw.fixtures||[]).find(f=>f.id==='bmls_nations');
+        if(nationsRec){
+          const nationMap={};
+          (nationsRec.nations||[]).forEach(n=>(n.players||[]).forEach(p=>{if(p.name)nationMap[p.name.trim().toLowerCase()]=n.name;}));
+          let changed=false;
+          teams=teams.map(t=>({...t,players:(t.players||[]).map(p=>{
+            if(p.country||!p.name)return p;
+            const c=nationMap[p.name.trim().toLowerCase()];
+            if(c){changed=true;return{...p,country:c};}
+            return p;
+          })}));
+          if(changed)syncTeams(teams);
+        }
+      }catch(e){}
+      setTeams(teams);
       setFixtures(data?.fixtures||[]);
       setTransfers(data?.transfers||[]);
       setActiveMatchWeek(data?.activeMatchWeek||1);
