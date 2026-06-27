@@ -614,7 +614,7 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
         <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:54,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"block"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:3}}>
           <span style={{fontSize:7,color:"rgba(255,255,255,0.55)",lineHeight:1.2,textShadow:"0 1px 2px rgba(0,0,0,0.8)"}}>{p.age||25}</span>
-          {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:12,height:12,borderRadius:2,objectFit:"cover",flexShrink:0}} alt=""/>:p.country?<span style={{fontSize:7,color:"rgba(255,255,255,0.55)"}}>{flagEmoji(p.country)}</span>:null}
+          {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:18,height:18,borderRadius:3,objectFit:"cover",flexShrink:0}} alt=""/>:p.country?<span style={{fontSize:10,color:"rgba(255,255,255,0.55)"}}>{flagEmoji(p.country)}</span>:null}
         </div>
       </div>
     );
@@ -657,7 +657,7 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
           <span style={{fontSize:7,color:"rgba(255,255,255,0.6)",textAlign:"center",fontWeight:600,lineHeight:1.2,maxWidth:50,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.name||"?").trim().split(/\s+/).pop()}</span>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>
             <span style={{fontSize:6,color:"rgba(255,255,255,0.35)",lineHeight:1.2}}>{p.age||25}</span>
-            {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:10,height:10,borderRadius:1,objectFit:"cover",flexShrink:0}} alt=""/>:p.country?<span style={{fontSize:6,color:"rgba(255,255,255,0.35)"}}>{flagEmoji(p.country)}</span>:null}
+            {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:14,height:14,borderRadius:2,objectFit:"cover",flexShrink:0}} alt=""/>:p.country?<span style={{fontSize:9,color:"rgba(255,255,255,0.35)"}}>{flagEmoji(p.country)}</span>:null}
           </div>
         </div>
       ))}
