@@ -831,14 +831,12 @@ function StatsTab({teams,fixtures}){
   const gamesPerTeam=Math.max(1,...Object.values(teamFxCount));
   const scoreBasedProj=useMemo(()=>teams.flatMap(t=>{
     const variance=id=>{const h=Math.abs(Math.round(id||0))%37;return 0.86+h*0.0078;};
-    const lu=predictedLineup(t,fixtures);
-    const starterIds=new Set([...(lu.starters||[]).map(p=>p.id),lu.gk?.id].filter(Boolean));
     return t.players.filter(p=>p.name).map(p=>{
       const pos=(p.position||'').trim();
       const sc=(p.score||5)/10,atk=(p.mdfAtkScore||p.score||5)/10;
       const wide=p.wide||false;
       const v=variance(p.id);
-      const appRate=starterIds.has(p.id)?0.82:0.30;
+      const appRate=0.85;
       const gpg=pos==='FWD'?sc*1.30:pos==='MDF'?0.03+atk*0.32:pos==='DEF'?(wide?0.02+sc*0.12:sc*0.04):0;
       const apg=pos==='FWD'?0.04+sc*0.28:pos==='MDF'?0.10+atk*0.55:pos==='DEF'?(wide?0.02+sc*0.12:sc*0.06):0;
       return{playerId:p.id,name:p.name,position:pos,teamId:t.id,teamName:t.name,teamColor:t.color,
@@ -846,7 +844,7 @@ function StatsTab({teams,fixtures}){
         assists:Math.round(apg*appRate*v*gamesPerTeam),
         avgRating:null,cleanSheets:0,yellowCards:0,redCard:false,apps:0};
     });
-  }),[teams,fixtures,gamesPerTeam]);
+  }),[teams,gamesPerTeam]);
   const projectedStats=playedCount===0?scoreBasedProj:playerStats.map(p=>{
     const tp=teamPlayed[p.teamId]||0;
     const rem=Math.max(0,gamesPerTeam-tp);
