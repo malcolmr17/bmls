@@ -1,4 +1,4 @@
-const CACHE = 'bmls-v4'
+const CACHE = 'bmls-v5'
 
 const PRECACHE = [
   '/',
