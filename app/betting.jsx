@@ -1156,7 +1156,10 @@ function BettingApp(){
               <div style={{fontSize:9,color:C.muted,letterSpacing:1}}>BALANCE</div>
               <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:C.gold}}>${userData.balance.toFixed(2)}</div>
             </div>
-            <div style={{fontSize:11,color:C.muted}}>{userData.username}</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3}}>
+              <div style={{fontSize:11,color:C.muted}}>{userData.username}</div>
+              <button onClick={()=>{localStorage.removeItem('bmls_betting_username');setScreen('username');setUserData(null);setLeagueData(null);setTab('bet');}} style={{background:"none",border:"none",fontSize:10,color:C.muted,cursor:"pointer",padding:0,fontFamily:"'DM Sans',sans-serif",textDecoration:"underline"}}>Log out</button>
+            </div>
           </div>
         </div>
       </div>
