@@ -823,12 +823,17 @@ function StatsTab({teams,fixtures}){
   const[mode,setMode]=useState("actual");
   const playerStats=useMemo(()=>computePlayerStats(teams,fixtures),[teams,fixtures]);
   const playedCount=fixtures.filter(f=>f.played).length;
-  if(playedCount===0)return<Empty icon="📊" msg="No results yet." hint="Mark fixtures as played and add player stats."/>;
   const n=teams.filter(t=>t.name).length;
   const gamesPerTeam=Math.max(1,(n-1)*2);
   const teamPlayed={};
   fixtures.filter(f=>f.played).forEach(f=>{teamPlayed[f.homeId]=(teamPlayed[f.homeId]||0)+1;teamPlayed[f.awayId]=(teamPlayed[f.awayId]||0)+1;});
-  const projectedStats=playerStats.map(p=>{
+  const scoreBasedProj=useMemo(()=>teams.flatMap(t=>t.players.filter(p=>p.name).map(p=>{
+    const pos=(p.position||'').trim();
+    const gpg=pos==='FWD'?(p.score||5)/10*0.5:pos==='MDF'?(p.mdfAtkScore||5)/10*0.18:pos==='DEF'?(p.score||5)/10*0.05:0;
+    const apg=pos==='FWD'?(p.score||5)/10*0.22:pos==='MDF'?(p.mdfAtkScore||5)/10*0.35:pos==='DEF'?(p.score||5)/10*0.1:0;
+    return{playerId:p.id,name:p.name,position:pos,teamId:t.id,teamName:t.name,teamColor:t.color,goals:Math.round(gpg*gamesPerTeam),assists:Math.round(apg*gamesPerTeam),avgRating:null,cleanSheets:0,yellowCards:0,redCard:false,apps:0};
+  })),[teams,gamesPerTeam]);
+  const projectedStats=playedCount===0?scoreBasedProj:playerStats.map(p=>{
     const tp=teamPlayed[p.teamId]||0;
     const rem=Math.max(0,gamesPerTeam-tp);
     const appRate=tp>0?Math.min(1,p.apps/tp):0.8;
@@ -838,6 +843,14 @@ function StatsTab({teams,fixtures}){
   });
   const activeStats=mode==="projected"?projectedStats:playerStats;
   const projCats=["goals","assists"];
+  if(playedCount===0&&mode==="actual")return(
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:20}}>
+        {["actual","projected"].map(m=><button key={m} onClick={()=>setMode(m)} style={{background:mode===m?C.accent:C.surface,color:mode===m?C.white:C.muted,border:`1px solid ${mode===m?C.accent:C.border}`,borderRadius:6,padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{m==="actual"?"Season Stats":"Projected"}</button>)}
+      </div>
+      <Empty icon="📊" msg="No results yet." hint="Mark fixtures as played and add player stats."/>
+    </div>
+  );
   const cats=[{key:"goals",label:"⚽ Goals",color:C.gold},{key:"assists",label:"🎯 Assists",color:C.green},{key:"avgRating",label:"⭐ Rating",color:C.purple},{key:"cleanSheets",label:"🧤 Clean Sheets",color:C.accent},{key:"yellowCards",label:"🟨 Yellows",color:C.gold},{key:"redCard",label:"🟥 Reds",color:C.red}];
   const sorted=key=>[...activeStats].filter(p=>{
     if(key==="goals"||key==="assists"||key==="yellowCards"||key==="cleanSheets")return(p[key]||0)>0;
@@ -866,7 +879,7 @@ function StatsTab({teams,fixtures}){
       </div>
       <div style={{marginBottom:16}}>
         <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:C.white,letterSpacing:1}}>{current.label}{mode==="projected"&&<span style={{fontSize:13,color:C.muted,letterSpacing:0,marginLeft:8,fontFamily:"'DM Sans',sans-serif",fontWeight:400}}>Projected</span>}</div>
-        <div style={{fontSize:11,color:C.muted}}>{playedCount} match{playedCount!==1?"es":""} · {list.length} player{list.length!==1?"s":""}{mode==="projected"&&` · based on current rate`}</div>
+        <div style={{fontSize:11,color:C.muted}}>{playedCount} match{playedCount!==1?"es":""} · {list.length} player{list.length!==1?"s":""}{mode==="projected"&&(playedCount===0?` · score-based estimate`:`  · based on current rate`)}</div>
       </div>
       {list.length===0&&<div style={{color:C.muted,fontSize:13,fontStyle:"italic"}}>None recorded yet.</div>}
       {list.map((p,i)=>{
