@@ -991,15 +991,24 @@ function ManageTab({teams,settings,onSaveSettings}){
       <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16,marginBottom:20}}>
         <SLabel>Player Costs (credits)</SLabel>
         <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Leave blank to use auto-calculated cost based on player score.</div>
-        {allPlayers.map(p=>{
-          const auto=p.position==='MDF'?Math.round(((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2):(p.score||5);
-          const custom=local.playerCosts[p.id];
+        {['GK','DEF','MDF','FWD'].map(pos=>{
+          const posPlayers=allPlayers.filter(p=>p.position===pos).sort((a,b)=>a.name.localeCompare(b.name));
+          if(!posPlayers.length)return null;
           return(
-            <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderBottom:`1px solid ${C.border}22`}}>
-              <span style={{background:posColor(p.position)+'22',color:posColor(p.position),borderRadius:3,padding:"1px 5px",fontSize:9,fontWeight:700,flexShrink:0}}>{p.position}</span>
-              <span style={{flex:1,fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-              <span style={{fontSize:10,color:C.muted,flexShrink:0}}>auto:{auto}</span>
-              <input type="number" min="1" max="20" placeholder={String(auto)} value={custom??''} onChange={e=>e.target.value===''?resetPlayerCost(p.id):setPlayerCost(p.id,+e.target.value)} style={{width:56,background:C.surface,border:`1px solid ${custom!=null?C.gold:C.border}`,borderRadius:6,padding:"4px 6px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",textAlign:"center"}}/>
+            <div key={pos} style={{marginBottom:12}}>
+              <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:posColor(pos),textTransform:"uppercase",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${posColor(pos)}33`}}>{pos}</div>
+              {posPlayers.map(p=>{
+                const auto=p.position==='MDF'?Math.round(((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2):(p.score||5);
+                const custom=local.playerCosts[p.id];
+                return(
+                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${C.border}22`}}>
+                    <span style={{flex:1,fontSize:12,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                    <span style={{fontSize:10,color:C.muted,flexShrink:0}}>{p.teamName}</span>
+                    <span style={{fontSize:10,color:C.muted,flexShrink:0}}>auto:{auto}</span>
+                    <input type="number" min="1" max="20" placeholder={String(auto)} value={custom??''} onChange={e=>e.target.value===''?resetPlayerCost(p.id):setPlayerCost(p.id,+e.target.value)} style={{width:56,background:C.surface,border:`1px solid ${custom!=null?C.gold:C.border}`,borderRadius:6,padding:"4px 6px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",textAlign:"center"}}/>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
