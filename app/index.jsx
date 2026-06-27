@@ -823,13 +823,14 @@ function StatsTab({teams,fixtures}){
   const[mode,setMode]=useState("actual");
   const playerStats=useMemo(()=>computePlayerStats(teams,fixtures),[teams,fixtures]);
   const playedCount=fixtures.filter(f=>f.played).length;
-  const n=teams.filter(t=>t.name).length;
-  const gamesPerTeam=Math.max(1,(n-1)*2);
   const teamPlayed={};
   fixtures.filter(f=>f.played).forEach(f=>{teamPlayed[f.homeId]=(teamPlayed[f.homeId]||0)+1;teamPlayed[f.awayId]=(teamPlayed[f.awayId]||0)+1;});
+  const leagueFx=fixtures.filter(f=>!f.type&&f.homeId&&f.awayId);
+  const teamFxCount={};
+  leagueFx.forEach(f=>{teamFxCount[f.homeId]=(teamFxCount[f.homeId]||0)+1;teamFxCount[f.awayId]=(teamFxCount[f.awayId]||0)+1;});
+  const gamesPerTeam=Math.max(1,...Object.values(teamFxCount));
   const scoreBasedProj=useMemo(()=>teams.flatMap(t=>{
-    const teamGpg=Math.max(0.4,lineupRatings(t).atk/10*1.4+0.3);
-    const variance=id=>{const h=Math.abs(Math.round(id||0))%37;return 0.82+h*0.0097;};
+    const variance=id=>{const h=Math.abs(Math.round(id||0))%37;return 0.86+h*0.0078;};
     const lu=predictedLineup(t,fixtures);
     const starterIds=new Set([...(lu.starters||[]).map(p=>p.id),lu.gk?.id].filter(Boolean));
     return t.players.filter(p=>p.name).map(p=>{
@@ -838,11 +839,11 @@ function StatsTab({teams,fixtures}){
       const wide=p.wide||false;
       const v=variance(p.id);
       const appRate=starterIds.has(p.id)?0.82:0.30;
-      const gShare=pos==='FWD'?0.15+sc*0.30:pos==='MDF'?0.04+atk*0.14:pos==='DEF'?(wide?0.04+sc*0.07:sc*0.02):0;
-      const aShare=pos==='FWD'?0.05+sc*0.14:pos==='MDF'?0.07+atk*0.26:pos==='DEF'?(wide?0.04+sc*0.07:sc*0.04):0;
+      const gpg=pos==='FWD'?0.18+sc*0.62:pos==='MDF'?0.04+atk*0.22:pos==='DEF'?(wide?0.03+sc*0.10:sc*0.03):0;
+      const apg=pos==='FWD'?0.05+sc*0.22:pos==='MDF'?0.08+atk*0.38:pos==='DEF'?(wide?0.03+sc*0.09:sc*0.04):0;
       return{playerId:p.id,name:p.name,position:pos,teamId:t.id,teamName:t.name,teamColor:t.color,
-        goals:Math.round(teamGpg*gShare*appRate*v*gamesPerTeam),
-        assists:Math.round(teamGpg*aShare*appRate*v*gamesPerTeam),
+        goals:Math.round(gpg*appRate*v*gamesPerTeam),
+        assists:Math.round(apg*appRate*v*gamesPerTeam),
         avgRating:null,cleanSheets:0,yellowCards:0,redCard:false,apps:0};
     });
   }),[teams,fixtures,gamesPerTeam]);
