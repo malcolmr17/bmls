@@ -998,7 +998,8 @@ function ManageTab({teams,settings,onSaveSettings}){
         <SLabel>Player Costs (credits)</SLabel>
         <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Leave blank to use auto-calculated cost based on player score.</div>
         {['GK','DEF','MDF','FWD'].map(pos=>{
-          const posPlayers=allPlayers.filter(p=>p.position===pos).sort((a,b)=>a.name.localeCompare(b.name));
+          const rawScore=p=>p.position==='MDF'?((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2:(p.score||5);
+          const posPlayers=allPlayers.filter(p=>p.position===pos).sort((a,b)=>rawScore(b)-rawScore(a)||a.name.localeCompare(b.name));
           if(!posPlayers.length)return null;
           return(
             <div key={pos} style={{marginBottom:12}}>
