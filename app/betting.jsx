@@ -966,15 +966,23 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
           ['GK','DEF','MDF','FWD'].forEach(pos=>{
             valueByPos[pos]=allPlayers.filter(p=>p.position===pos).map(p=>({...p,valuePer:rawRating(p)/p.cost})).sort((a,b)=>b.valuePer-a.valuePer).slice(0,3);
           });
-          // Greedy optimal squad within budget
+          // Greedy optimal squad within budget — reserve-aware so all 9 slots fill
           const greedySquad=[];
           let rem=BUDGET;
-          ['FWD','MDF','DEF','GK'].forEach(pos=>{
-            const sorted=allPlayers.filter(p=>p.position===pos).sort((a,b)=>rawRating(b)-rawRating(a));
+          const gPosOrder=['GK','DEF','MDF','FWD'];
+          gPosOrder.forEach((pos,pi)=>{
+            const futurePosns=gPosOrder.slice(pi+1);
+            const candidates=allPlayers.filter(p=>p.position===pos).sort((a,b)=>rawRating(b)-rawRating(a));
             let count=0;
-            for(const p of sorted){
+            const localPicked=new Set(greedySquad.map(p=>p.id));
+            for(const p of candidates){
               if(count>=REQUIRED[pos])break;
-              if(p.cost<=rem){greedySquad.push(p);rem-=p.cost;count++;}
+              localPicked.add(p.id);
+              const slotsLeftHere=REQUIRED[pos]-count-1;
+              const minHere=candidates.filter(q=>!localPicked.has(q.id)).sort((a,b)=>a.cost-b.cost).slice(0,slotsLeftHere).reduce((s,q)=>s+q.cost,0);
+              const minFuture=futurePosns.reduce((s,fp)=>s+allPlayers.filter(q=>q.position===fp&&!localPicked.has(q.id)).sort((a,b)=>a.cost-b.cost).slice(0,REQUIRED[fp]).reduce((s2,q)=>s2+q.cost,0),0);
+              if(p.cost+minHere+minFuture<=rem){greedySquad.push(p);rem-=p.cost;count++;}
+              else{localPicked.delete(p.id);}
             }
           });
           const greedyCost=BUDGET-rem;
