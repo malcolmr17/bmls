@@ -83,6 +83,13 @@ app.get('/worldcup/bundle.js', (req, res) => {
   res.sendFile(join(__dirname, 'worldcup-bundle.js'))
 })
 
+app.get('/betting', (req, res) => {
+  res.sendFile(join(__dirname, 'betting.html'))
+})
+app.get('/betting/bundle.js', (req, res) => {
+  res.sendFile(join(__dirname, 'betting-bundle.js'))
+})
+
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'index.html'))
 })

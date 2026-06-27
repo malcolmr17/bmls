@@ -1276,6 +1276,9 @@ function OddsTab({teams,fixtures,activeMatchWeek}){
         );
       })}
       <div style={{fontSize:11,color:C.muted,textAlign:"center",paddingBottom:8}}>Entertainment only</div>
+      <div style={{textAlign:"center",marginTop:8,paddingBottom:8}}>
+        <a href="/betting" style={{display:"inline-block",background:C.gold,color:"#000",fontWeight:700,fontSize:14,padding:"12px 28px",borderRadius:10,textDecoration:"none",letterSpacing:.5}}>🎰 Open Betting &amp; Fantasy</a>
+      </div>
     </div>
   );
 }

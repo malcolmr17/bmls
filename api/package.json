@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "NODE_PATH=./node_modules esbuild ../app/index.jsx --bundle --minify --outfile=bundle.js --define:process.env.NODE_ENV='\"production\"' && NODE_PATH=./node_modules esbuild ../app/worldcup.jsx --bundle --minify --outfile=worldcup-bundle.js --define:process.env.NODE_ENV='\"production\"'"
+    "build": "NODE_PATH=./node_modules esbuild ../app/index.jsx --bundle --minify --outfile=bundle.js --define:process.env.NODE_ENV='\"production\"' && NODE_PATH=./node_modules esbuild ../app/worldcup.jsx --bundle --minify --outfile=worldcup-bundle.js --define:process.env.NODE_ENV='\"production\"' && NODE_PATH=./node_modules esbuild ../app/betting.jsx --bundle --minify --outfile=betting-bundle.js --define:process.env.NODE_ENV='\"production\"'"
   },
   "dependencies": {
     "express": "^4.19.2",
