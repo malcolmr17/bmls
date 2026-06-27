@@ -92,6 +92,24 @@ async function syncFixture(f){try{await fetch(`/api/fixture/${f.id}`,{method:'PU
 async function deleteFixture(id){try{await fetch(`/api/fixture/${id}`,{method:'DELETE'});}catch(e){console.error('delete fixture:',e);}}
 async function syncTransfer(t){try{await fetch(`/api/fixture/${t.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(t)});}catch(e){console.error('sync transfer:',e);}}
 
+async function resizeFlag(file){
+  return new Promise(resolve=>{
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      const W=120,H=80;
+      const canvas=document.createElement('canvas');
+      canvas.width=W;canvas.height=H;
+      const ctx=canvas.getContext('2d');
+      const scale=Math.max(W/img.width,H/img.height);
+      const sw=img.width*scale,sh=img.height*scale;
+      ctx.drawImage(img,(W-sw)/2,(H-sh)/2,sw,sh);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg',0.80));
+    };
+    img.src=url;
+  });
+}
 async function resizeCrest(file){
   return new Promise(resolve=>{
     const img=new Image();
@@ -1376,10 +1394,27 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
       {view==="countries"&&(()=>{
         const allPlayers=teams.flatMap(t=>t.players.filter(p=>p.name).map(p=>({...p,_teamId:t.id,_teamName:t.name,_teamColor:t.color})));
         const missing=allPlayers.filter(p=>!p.country);
+        const withCountry=allPlayers.filter(p=>p.country);
         const setCountry=(teamId,playerId,val)=>{
           const nt=teams.map(t=>t.id!==teamId?t:{...t,players:t.players.map(p=>p.id!==playerId?p:{...p,country:val})});
           setTeams(nt);syncTeams(nt);
         };
+        const uploadFlag=async(countryName,file)=>{
+          if(!file||!countryName)return;
+          const dataUrl=await resizeFlag(file);
+          nationCrests[countryName]=dataUrl;
+          try{
+            const r=await fetch('/api/state').then(x=>x.json());
+            const rec=(r.fixtures||[]).find(f=>f.id==='bmls_nations')||{id:'bmls_nations',nations:[]};
+            const nations=rec.nations||[];
+            const idx=nations.findIndex(n=>n.name===countryName);
+            if(idx>=0)nations[idx]={...nations[idx],crest:dataUrl};
+            else nations.push({name:countryName,crest:dataUrl,players:[]});
+            await syncFixture({...rec,nations});
+          }catch(e){console.error(e);}
+          setTeams(t=>[...t]);
+        };
+        const byCountry=[...new Set(withCountry.map(p=>p.country))].map(c=>({country:c,players:withCountry.filter(p=>p.country===c)}));
         return(
           <div>
             <SLabel>Player Countries</SLabel>
@@ -1401,23 +1436,30 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
                 />
               </div>
             ))}
-            {allPlayers.filter(p=>p.country).length>0&&(
+            {byCountry.length>0&&(
               <div style={{marginTop:20}}>
-                <SLabel>Countries Set</SLabel>
-                {allPlayers.filter(p=>p.country).map(p=>(
-                  <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:C.card,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:6}}>
-                    <div style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700,flexShrink:0}}>{p.position}</div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:13,fontWeight:600,color:C.text}}>{p.name}</div>
-                      <div style={{fontSize:10,color:C.muted}}>{p._teamName}</div>
+                <SLabel>Countries & Flags</SLabel>
+                {byCountry.map(({country,players})=>(
+                  <div key={country} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                      <div style={{flex:1,fontSize:14,fontWeight:700,color:C.text}}>{country}</div>
+                      {nationCrests[country]
+                        ?<img src={nationCrests[country]} style={{width:36,height:24,borderRadius:3,objectFit:"cover",boxShadow:"0 1px 4px rgba(0,0,0,0.4)"}} alt=""/>
+                        :<span style={{fontSize:22}}>{flagEmoji(country)||"🏳"}</span>}
+                      <label style={{background:C.accent,color:"#fff",borderRadius:6,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                        {nationCrests[country]?"Change Flag":"Upload Flag"}
+                        <input type="file" accept="image/*" style={{display:"none"}} onChange={async e=>{const f=e.target.files[0];if(f)await uploadFlag(country,f);e.target.value="";}}/>
+                      </label>
                     </div>
-                    {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:24,height:17,borderRadius:2,objectFit:"cover"}} alt=""/>:<span style={{fontSize:14}}>{flagEmoji(p.country)}</span>}
-                    <input
-                      defaultValue={p.country}
-                      onBlur={e=>{if(e.target.value.trim()!==p.country)setCountry(p._teamId,p.id,e.target.value.trim());}}
-                      onKeyDown={e=>{if(e.key==='Enter'){setCountry(p._teamId,p.id,e.target.value.trim());e.target.blur();}}}
-                      style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 10px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:130,flexShrink:0}}
-                    />
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {players.map(p=>(
+                        <div key={p.id} style={{display:"flex",alignItems:"center",gap:5,background:C.surface,borderRadius:6,padding:"3px 8px"}}>
+                          <span style={{background:posColor(p.position)+"22",color:posColor(p.position),borderRadius:3,padding:"1px 5px",fontSize:9,fontWeight:700}}>{p.position}</span>
+                          <span style={{fontSize:12,color:C.text}}>{p.name}</span>
+                          <span style={{fontSize:10,color:C.muted}}>{p._teamName}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
