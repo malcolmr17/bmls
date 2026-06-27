@@ -1350,7 +1350,7 @@ function TransfersTab({transfers,teams,fixtures}){
             </div>
           </div>
         </div>
-      ))}
+      ))}</>}
       {view==="history"&&<>
         <SLabel>Transfer History</SLabel>
         {transfers.length===0&&<div style={{color:C.muted,fontSize:13,fontStyle:"italic"}}>No transfers yet. Go to Manage → Transfers to make a trade.</div>}
