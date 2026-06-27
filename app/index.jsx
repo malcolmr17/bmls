@@ -138,6 +138,34 @@ function isAutoSuspended(playerId,fixtures){
   return yellows>=3;
 }
 
+function calcMatchRating(ps,position,result){
+  let r=6;
+  const g=ps.goals||0,a=ps.assists||0,y=ps.yellowCards||0,red=ps.redCard||false;
+  if(position==='GK'){
+    r+=Math.floor((ps.saves||0)/2);
+  } else if(position==='DEF'){
+    r+=(ps.tackles||0)-1;
+    r+=g*2.5;
+    r+=a*1.5;
+  } else if(position==='MDF'){
+    r+=(g===1?1:g===2?3:g>=3?5:0);
+    r+=a*1;
+  } else if(position==='FWD'){
+    r+=(g===1?1:g===2?2.5:g>=3?4.5:0);
+    r+=a*1.5;
+  }
+  r-=y*0.5;
+  if(red)r-=1.5;
+  if(result==='win')r+=0.5;
+  else if(result==='loss')r-=0.5;
+  return Math.min(10,Math.max(1,+r.toFixed(1)));
+}
+function ratingColor(r){
+  if(r<3)return'#ef4444';
+  if(r<6)return'#f97316';
+  if(r===6)return'#6b7280';
+  return'#22c55e';
+}
 function lineupRatings(team){
   if(!team)return{atk:0,def:0};
   const active=team.players.filter(p=>!p.injured&&!p.suspended);
@@ -778,36 +806,97 @@ function FixturesTab({teams,fixtures,onPlayerClick,activeMatchWeek,onApplySim}){
                   </>
                 )}
                 {expanded&&f.played&&(()=>{
-                  const stats=f.playerStats||[];
-                  const scorers=stats.filter(ps=>ps.goals>0).map(ps=>{
-                    const player=[...h.players,...a.players].find(p=>p.id===ps.playerId);
-                    const team=h.players.find(p=>p.id===ps.playerId)?h:a;
-                    return player?{...ps,name:player.name,teamColor:team.color}:null;
-                  }).filter(Boolean);
-                  const assists=stats.filter(ps=>ps.assists>0).map(ps=>{
-                    const player=[...h.players,...a.players].find(p=>p.id===ps.playerId);
-                    const team=h.players.find(p=>p.id===ps.playerId)?h:a;
-                    return player?{...ps,name:player.name,teamColor:team.color}:null;
-                  }).filter(Boolean);
+                  const ps=f.playerStats||[];
+                  const hResult=f.homeScore>f.awayScore?'win':f.homeScore<f.awayScore?'loss':'draw';
+                  const aResult=f.homeScore<f.awayScore?'win':f.homeScore>f.awayScore?'loss':'draw';
+                  const getRating=(player,team)=>{
+                    const stat=ps.find(s=>s.playerId===player.id);
+                    if(!stat)return null;
+                    const result=team.id===f.homeId?hResult:aResult;
+                    return calcMatchRating(stat,player.position,result);
+                  };
+                  const hl=predictedLineup(h,fixtures);
+                  const al=predictedLineup(a,fixtures);
+                  const RatingDot=({p,team})=>{
+                    const r=getRating(p,team);
+                    const bg=r!=null?ratingColor(r):'#6b7280';
+                    const isCap=(p.roles||[]).includes('captain');
+                    return(
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,width:76}}>
+                        <div style={{display:"flex",alignItems:"center",gap:5}}>
+                          <div style={{position:"relative",width:34,height:34,flexShrink:0}}>
+                            <div style={{width:34,height:34,borderRadius:"50%",background:bg,border:"2.5px solid rgba(255,255,255,0.9)",boxShadow:"0 2px 8px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <span style={{fontSize:r!=null?11:7,fontWeight:900,color:"#fff",textShadow:"0 1px 2px rgba(0,0,0,0.5)"}}>{r!=null?r:p.position}</span>
+                            </div>
+                            {isCap&&<div style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"#F59E0B",fontSize:7,fontWeight:900,color:"#000",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2}}>C</div>}
+                          </div>
+                          {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:22,height:15,borderRadius:2,objectFit:"cover",flexShrink:0}} alt=""/>:p.country?<span style={{fontSize:11}}>{flagEmoji(p.country)}</span>:null}
+                        </div>
+                        <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:76,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
+                      </div>
+                    );
+                  };
+                  const RatingBenchDot=({p,team})=>{
+                    const r=getRating(p,team);
+                    const bg=r!=null?ratingColor(r)+'99':'#6b728099';
+                    return(
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:10}}>
+                        <div style={{width:28,height:28,borderRadius:"50%",background:bg,border:`1.5px solid rgba(255,255,255,0.3)`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:3}}>
+                          <span style={{fontSize:r!=null?9:7,fontWeight:900,color:"#fff"}}>{r!=null?r:p.position}</span>
+                        </div>
+                        <span style={{fontSize:7,color:"rgba(255,255,255,0.6)",textAlign:"center",fontWeight:600,lineHeight:1.2,maxWidth:50,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.name||"?").trim().split(/\s+/).pop()}</span>
+                      </div>
+                    );
+                  };
+                  const RatingRow=({players,team})=>(
+                    <div style={{display:"flex",justifyContent:"center",gap:players.length===2?36:20,padding:"0 4px",flexWrap:"wrap",alignItems:"center"}}>
+                      {players.map(p=><RatingDot key={p.id} p={p} team={team}/>)}
+                    </div>
+                  );
+                  const RatingBench=({bench,team,align})=>(
+                    <div style={{width:56,background:"#0d2214",flexShrink:0,borderRight:align==='left'?'1px solid rgba(255,255,255,0.07)':0,borderLeft:align==='right'?'1px solid rgba(255,255,255,0.07)':0,padding:"14px 5px",display:"flex",flexDirection:"column",alignItems:"center"}}>
+                      <div style={{fontSize:6,color:"rgba(255,255,255,0.28)",letterSpacing:1.5,textTransform:"uppercase",marginBottom:10,textAlign:"center"}}>bench</div>
+                      {bench.length===0&&<div style={{fontSize:8,color:"rgba(255,255,255,0.18)",textAlign:"center"}}>—</div>}
+                      {bench.map(p=><RatingBenchDot key={p.id} p={p} team={team}/>)}
+                    </div>
+                  );
                   return(
-                    <div style={{borderTop:`1px solid ${C.border}`,padding:"12px 16px",background:C.surface}}>
-                      {scorers.length>0&&<div style={{marginBottom:8}}>
-                        <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>⚽ Scorers</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                          {scorers.map((s,i)=><span key={i} style={{fontSize:11,color:C.text,background:C.card,borderRadius:5,padding:"3px 8px",display:"flex",alignItems:"center",gap:4}}>
-                            <span style={{width:7,height:7,borderRadius:"50%",background:s.teamColor,display:"inline-block"}}/>{s.name} {s.goals}{s.penGoals>0?` (${s.penGoals}p)`:""}
-                          </span>)}
+                    <div style={{borderTop:`1px solid ${C.border}`,background:C.surface}}>
+                      <div style={{display:"flex",gap:12,padding:"10px 14px 6px",flexWrap:"wrap"}}>
+                        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                          {[{bg:'#22c55e',label:'Above 6'},{bg:'#f97316',label:'3–5.5'},{bg:'#ef4444',label:'Below 3'},{bg:'#6b7280',label:'Neutral'}].map(({bg,label})=>(
+                            <div key={label} style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:"50%",background:bg}}/><span style={{fontSize:9,color:C.muted}}>{label}</span></div>
+                          ))}
                         </div>
-                      </div>}
-                      {assists.length>0&&<div>
-                        <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>🎯 Assists</div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                          {assists.map((s,i)=><span key={i} style={{fontSize:11,color:C.text,background:C.card,borderRadius:5,padding:"3px 8px",display:"flex",alignItems:"center",gap:4}}>
-                            <span style={{width:7,height:7,borderRadius:"50%",background:s.teamColor,display:"inline-block"}}/>{s.name} {s.assists}
-                          </span>)}
+                      </div>
+                      <div style={{borderRadius:10,overflow:"hidden",display:"flex"}}>
+                        <RatingBench bench={hl.bench} team={h} align="left"/>
+                        <div style={{flex:1,position:"relative",background:"#1b6530"}}>
+                          <div style={{position:"absolute",inset:0,background:"repeating-linear-gradient(180deg,rgba(0,0,0,0) 0px,rgba(0,0,0,0) 36px,rgba(0,0,0,0.07) 36px,rgba(0,0,0,0.07) 72px)",pointerEvents:"none"}}/>
+                          <div style={{position:"relative",zIndex:1,padding:"20px 10px"}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,padding:"0 4px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:h.color}}/><span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)"}}>{h.name}</span></div>
+                              <span style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontWeight:600,letterSpacing:1}}>{hl.formation.label}</span>
+                            </div>
+                            {hl.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:28}}><RatingDot p={hl.gk} team={h}/></div>}
+                            {hl.defs.length>0&&<div style={{marginBottom:28}}><RatingRow players={hl.defs} team={h}/></div>}
+                            {hl.mdfs.length>0&&<div style={{marginBottom:28}}><RatingRow players={hl.mdfs} team={h}/></div>}
+                            {hl.fwds.length>0&&<div style={{marginBottom:28}}><RatingRow players={hl.fwds} team={h}/></div>}
+                            <div style={{display:"flex",alignItems:"center",gap:8,margin:"20px 0"}}>
+                              <div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/><span style={{fontSize:8,color:"rgba(255,255,255,0.4)",fontWeight:700,letterSpacing:2,textTransform:"uppercase"}}>{f.homeScore} – {f.awayScore}</span><div style={{flex:1,height:1,background:"rgba(255,255,255,0.15)"}}/>
+                            </div>
+                            {al.fwds.length>0&&<div style={{marginBottom:28}}><RatingRow players={al.fwds} team={a}/></div>}
+                            {al.mdfs.length>0&&<div style={{marginBottom:28}}><RatingRow players={al.mdfs} team={a}/></div>}
+                            {al.defs.length>0&&<div style={{marginBottom:28}}><RatingRow players={al.defs} team={a}/></div>}
+                            {al.gk&&<div style={{display:"flex",justifyContent:"center",marginBottom:24}}><RatingDot p={al.gk} team={a}/></div>}
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:2,background:a.color}}/><span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.9)"}}>{a.name}</span></div>
+                              <span style={{fontSize:9,color:"rgba(255,255,255,0.5)",fontWeight:600,letterSpacing:1}}>{al.formation.label}</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>}
-                      {scorers.length===0&&assists.length===0&&<div style={{fontSize:12,color:C.muted,fontStyle:"italic"}}>No stats recorded.</div>}
+                        <RatingBench bench={al.bench} team={a} align="right"/>
+                      </div>
                     </div>
                   );
                 })()}
@@ -1280,7 +1369,7 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
     const hTeam=teams.find(t=>t.id===f.homeId),aTeam=teams.find(t=>t.id===f.awayId);
     const allP=[...(hTeam?.players||[]).map(p=>({...p,teamId:hTeam.id})),...(aTeam?.players||[]).map(p=>({...p,teamId:aTeam.id}))];
     const ex=f.playerStats||[];
-    return allP.map(p=>{const e=ex.find(ps=>ps.playerId===p.id);return e?e:{playerId:p.id,teamId:p.teamId,goals:0,penGoals:0,assists:0,yellowCards:0,redCard:false,cleanSheet:false,rating:0};});
+    return allP.map(p=>{const e=ex.find(ps=>ps.playerId===p.id);return e?e:{playerId:p.id,teamId:p.teamId,goals:0,penGoals:0,assists:0,yellowCards:0,redCard:false,cleanSheet:false,tackles:0,saves:0};});
   };
   const updFixStat=(f,pid,field,val)=>setEditFix({...f,playerStats:f.playerStats.map(ps=>ps.playerId===pid?{...ps,[field]:val}:ps)});
   const openFix=f=>setEditFix({...f,playerStats:initFixStats(f,teams)});
@@ -1611,18 +1700,12 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
                           <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Red</div>
                           <button onClick={()=>updFixStat(editFix,playerId,"redCard",!ps.redCard)} style={{width:34,height:34,borderRadius:5,border:`1px solid ${ps.redCard?C.red:C.border}`,background:ps.redCard?`${C.red}33`:"transparent",color:ps.redCard?C.red:C.muted,cursor:"pointer",fontSize:16}}>🟥</button>
                         </div>
+                        {player.position==="GK"&&<NumStepper label="Saves" value={ps.saves||0} onChange={v=>updFixStat(editFix,playerId,"saves",v)} color={C.purple}/>}
                         {player.position==="GK"&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
                           <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Clean Sheet</div>
                           <button onClick={()=>updFixStat(editFix,playerId,"cleanSheet",!ps.cleanSheet)} style={{width:34,height:34,borderRadius:5,border:`1px solid ${ps.cleanSheet?C.green:C.border}`,background:ps.cleanSheet?`${C.green}33`:"transparent",color:ps.cleanSheet?C.green:C.muted,cursor:"pointer",fontSize:16}}>🧤</button>
                         </div>}
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-                          <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Rating</div>
-                          <div style={{display:"flex",alignItems:"center",gap:4}}>
-                            <button onClick={()=>updFixStat(editFix,playerId,"rating",Math.max(0,+(ps.rating||0)-0.5))} style={{width:22,height:22,borderRadius:4,border:`1px solid ${C.border}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:14,lineHeight:1,fontFamily:"'DM Sans',sans-serif"}}>−</button>
-                            <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:C.purple,minWidth:32,textAlign:"center"}}>{ps.rating||"—"}</span>
-                            <button onClick={()=>updFixStat(editFix,playerId,"rating",Math.min(10,+(ps.rating||0)+0.5))} style={{width:22,height:22,borderRadius:4,border:`1px solid ${C.border}`,background:C.surface,color:C.sub,cursor:"pointer",fontSize:14,lineHeight:1,fontFamily:"'DM Sans',sans-serif"}}>+</button>
-                          </div>
-                        </div>
+                        {player.position==="DEF"&&<NumStepper label="Tackles" value={ps.tackles||0} onChange={v=>updFixStat(editFix,playerId,"tackles",v)} color={C.green}/> }
                       </div>
                     </div>
                   ))}
