@@ -1270,11 +1270,83 @@ function OddsTab({teams,fixtures,activeMatchWeek}){
   );
 }
 
-function TransfersTab({transfers,teams}){
-  if(transfers.length===0)return<Empty icon="🔄" msg="No transfers yet." hint="Go to Manage → Transfers to make a trade."/>;
+function generateRumors(teams,fixtures){
+  const named=teams.filter(t=>t.name&&t.players.length>0);
+  if(named.length<2)return[];
+  const sr=seed=>((seed*7+13)%97)/97;
+  const score=p=>p.position==='MDF'?(((p.mdfAtkScore||5)+(p.mdfDefScore||5))/2):(p.score||5);
+  const rumors=[];
+  const usedTargets=new Set();
+  named.forEach(buyTeam=>{
+    const lineup=predictedLineup(buyTeam,fixtures);
+    const starters=[lineup.gk,...lineup.defs,...lineup.mdfs,...lineup.fwds].filter(Boolean);
+    if(starters.length===0)return;
+    const seed0=buyTeam.id*31;
+    let pos;
+    if(sr(seed0)<0.3){
+      const positions=[...new Set(starters.map(p=>p.position))];
+      pos=positions[Math.floor(sr(seed0+1)*positions.length)];
+    } else {
+      pos=[...starters].sort((a,b)=>score(a)-score(b))[0].position;
+    }
+    const outCands=starters.filter(p=>p.position===pos);
+    if(!outCands.length)return;
+    const outgoing=[...outCands].sort((a,b)=>score(a)-score(b))[0];
+    const candidates=named.filter(t=>t.id!==buyTeam.id).flatMap(t=>t.players.filter(p=>p.name&&p.position===pos&&score(p)>score(outgoing)&&!usedTargets.has(p.id)).map(p=>({p,t})));
+    if(!candidates.length)return;
+    const seed1=buyTeam.id*17+outgoing.id;
+    const{p:target,t:sellTeam}=candidates[Math.floor(sr(seed1)*candidates.length)];
+    usedTargets.add(target.id);
+    const targetVal=playerValue(target,sellTeam);
+    const outVal=playerValue(outgoing,buyTeam);
+    const gap=Math.max(0,targetVal-outVal);
+    const seed2=target.id*13+buyTeam.id*7;
+    const cashOffer=Math.max(5,Math.round(gap*(0.7+sr(seed2)*0.4)/5)*5);
+    const budget=buyTeam.budget||0;
+    rumors.push({buyTeam,sellTeam,target,outgoing,targetVal,outVal,cashOffer,canAfford:budget===0||cashOffer<=budget,totalOffer:outVal+cashOffer,seed:seed1});
+  });
+  return rumors.slice(0,8);
+}
+
+function TransfersTab({transfers,teams,fixtures}){
+  const rumors=useMemo(()=>generateRumors(teams,fixtures),[teams,fixtures]);
   return(
     <div>
-      <SLabel>Transfer History</SLabel>
+      <SLabel>Transfer Rumours</SLabel>
+      {rumors.length===0&&<div style={{color:C.muted,fontSize:13,fontStyle:"italic",marginBottom:20}}>Not enough squad data to generate rumours.</div>}
+      {rumors.map((r,i)=>(
+        <div key={i} style={{background:C.card,border:`1px solid ${C.border}`,borderLeft:`3px solid ${C.gold}`,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+            <span style={{background:C.gold+'22',color:C.gold,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700,letterSpacing:.5}}>RUMOUR</span>
+            {!r.canAfford&&<span style={{background:C.red+'22',color:C.red,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:700}}>OVER BUDGET</span>}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:8,marginBottom:10}}>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                <TeamBadge color={r.buyTeam.color} crest={r.buyTeam.crest} size={16}/>
+                <span style={{fontSize:10,color:C.muted,fontWeight:600}}>{r.buyTeam.name}</span>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:2}}>Offer</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,color:C.text}}>{r.outgoing.name}</div>
+              <div style={{fontSize:10,color:posColor(r.outgoing.position),fontWeight:700}}>{r.outgoing.position} · £{r.outVal}M</div>
+              <div style={{fontSize:11,color:C.gold,marginTop:2}}>+ £{r.cashOffer}M cash</div>
+            </div>
+            <div style={{fontSize:18,color:C.muted}}>→</div>
+            <div style={{textAlign:"right"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,justifyContent:"flex-end"}}>
+                <span style={{fontSize:10,color:C.muted,fontWeight:600}}>{r.sellTeam.name}</span>
+                <TeamBadge color={r.sellTeam.color} crest={r.sellTeam.crest} size={16}/>
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:2}}>Target</div>
+              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:15,color:C.text}}>{r.target.name}</div>
+              <div style={{fontSize:10,color:posColor(r.target.position),fontWeight:700}}>{r.target.position} · £{r.targetVal}M</div>
+              <div style={{fontSize:11,color:C.text,marginTop:2}}>Total bid £{r.totalOffer}M</div>
+            </div>
+          </div>
+        </div>
+      ))}
+      {transfers.length>0&&<>
+      <SLabel style={{marginTop:8}}>Transfer History</SLabel>
       {[...transfers].sort((a,b)=>b.date.localeCompare(a.date)).map(t=>{
         const from=teams.find(x=>x.id===t.fromTeamId);
         const to=teams.find(x=>x.id===t.toTeamId);
@@ -1303,6 +1375,8 @@ function TransfersTab({transfers,teams}){
           </div>
         );
       })}
+      </>}
+      {transfers.length===0&&<div style={{color:C.muted,fontSize:13,fontStyle:"italic"}}>No transfers yet. Go to Manage → Transfers to make a trade.</div>}
     </div>
   );
 }
@@ -2023,6 +2097,30 @@ function generateArticles(teams,fixtures,transfers,activeMW){
         {pundit:dp1,backs:benched.name,quote:proB[seed%proB.length]},
         {pundit:dp2,backs:starter.name,quote:proS[(seed+1)%proS.length]},
       ]},
+    });
+  });
+
+  // transfer rumours
+  const rumors=generateRumors(teams,fixtures);
+  rumors.slice(0,4).forEach(r=>{
+    const seed=r.seed;
+    const headlines=[
+      `Will ${r.target.name} leave ${r.sellTeam.name}? ${r.buyTeam.name} plotting audacious move`,
+      `${r.buyTeam.name} eye ${r.target.name} as ${r.outgoing.name} exit grows more likely`,
+      `On the move? ${r.target.name} linked with switch to ${r.buyTeam.name}`,
+      `${r.buyTeam.name} ready to table £${r.totalOffer}M offer for ${r.sellTeam.name} star`,
+      `${r.target.name} future uncertain as ${r.buyTeam.name} circle`,
+    ];
+    const bodies=[
+      `${r.buyTeam.name} are believed to be plotting a move for ${r.sellTeam.name} ${r.target.position} ${r.target.name}. Sources suggest a deal worth £${r.totalOffer}M — involving ${r.outgoing.name} plus £${r.cashOffer}M in cash — is being lined up. ${r.sellTeam.name} are yet to respond publicly but insiders say a bid is expected imminently.`,
+      `${r.target.name} could be set for a new challenge after ${r.buyTeam.name} emerged as serious suitors. The proposed package of ${r.outgoing.name} and £${r.cashOffer}M cash totals £${r.totalOffer}M — a figure that may test ${r.sellTeam.name}'s resolve. Whether the player himself is keen remains to be seen.`,
+      `Transfer speculation is mounting around ${r.target.name} of ${r.sellTeam.name}. ${r.buyTeam.name} are understood to have held internal discussions over a bid that would see ${r.outgoing.name} head in the opposite direction alongside £${r.cashOffer}M. The window is open and things could move quickly.`,
+    ];
+    articles.push({
+      tag:'Rumour',color:C.gold,
+      headline:headlines[Math.abs(seed)%headlines.length],
+      body:bodies[Math.abs(seed)%bodies.length],
+      date:'Transfer Window',priority:3,
     });
   });
 
@@ -4059,7 +4157,7 @@ function App(){
         {tab==="stats"   &&<StatsTab teams={teams} fixtures={fixtures}/>}
         {tab==="ratings" &&<RatingsTab teams={teams}/>}
         {tab==="squads"    &&<SquadsTab teams={teams} fixtures={fixtures}/>}
-        {tab==="transfers" &&<TransfersTab transfers={transfers} teams={teams}/>}
+        {tab==="transfers" &&<TransfersTab transfers={transfers} teams={teams} fixtures={fixtures}/>}
         {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek}/>}
         {tab==="odds"      &&<OddsTab teams={teams} fixtures={fixtures} activeMatchWeek={activeMatchWeek}/>}
         {tab==="playoffs"  &&<PlayoffsTab teams={teams} fixtures={fixtures}/>}
