@@ -26,7 +26,7 @@ const ROLES=[
 ];
 
 const makeTeam=id=>({id,name:"",shortName:"",color:"#3B82F6",crest:null,players:[],formation:"2-2-1",budget:0});
-const makePlayer=()=>({id:Date.now()+Math.random(),name:"",position:"DEF",score:7,mdfAtkScore:7,mdfDefScore:7,age:25,country:"",injured:false,suspended:false,wide:false,altPosition:null,roles:[]});
+const makePlayer=()=>({id:Date.now()+Math.random(),name:"",position:"DEF",score:7,mdfAtkScore:7,mdfDefScore:7,age:25,country:"",kitNumber:null,injured:false,suspended:false,wide:false,altPosition:null,roles:[]});
 const makeFixture=()=>({id:String(Date.now()+Math.random()),homeId:null,awayId:null,date:"",homeScore:null,awayScore:null,played:false,playerStats:[],matchWeek:null});
 let nationCrests={};
 
@@ -654,7 +654,7 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
         <div style={{display:"flex",alignItems:"center",gap:5}}>
           <div style={{position:"relative",width:34,height:34,flexShrink:0}}>
             <div style={{width:34,height:34,borderRadius:"50%",background:color,border:"2.5px solid rgba(255,255,255,0.9)",boxShadow:"0 2px 8px rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:7,fontWeight:900,color:"rgba(255,255,255,0.95)",letterSpacing:.5,textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.position==="GK"?"GK":p.position}</span>
+              <span style={{fontSize:p.kitNumber?13:7,fontWeight:900,color:"rgba(255,255,255,0.95)",letterSpacing:.5,textShadow:"0 1px 2px rgba(0,0,0,0.4)"}}>{p.kitNumber||( p.position==="GK"?"GK":p.position)}</span>
             </div>
             {isCap&&<div style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"#F59E0B",fontSize:7,fontWeight:900,color:"#000",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2,boxShadow:"0 1px 3px rgba(0,0,0,0.5)"}}>C</div>}
           </div>
@@ -698,7 +698,7 @@ function FieldLineup({home,away,fixtures,onPlayerClick}){
       {bench.map(p=>(
         <div key={p.id} onClick={()=>onPlayerClick&&onPlayerClick({player:p,team})} style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:10,cursor:onPlayerClick?"pointer":"default"}}>
           <div style={{width:28,height:28,borderRadius:"50%",background:color+"99",border:`1.5px solid ${color}66`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:3}}>
-            <span style={{fontSize:7,fontWeight:900,color:"rgba(255,255,255,0.9)"}}>{p.position==="GK"?"GK":p.position}</span>
+            <span style={{fontSize:p.kitNumber?11:7,fontWeight:900,color:"rgba(255,255,255,0.9)"}}>{p.kitNumber||(p.position==="GK"?"GK":p.position)}</span>
           </div>
           <span style={{fontSize:7,color:"rgba(255,255,255,0.6)",textAlign:"center",fontWeight:600,lineHeight:1.2,maxWidth:50,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.name||"?").trim().split(/\s+/).pop()}</span>
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:2}}>
@@ -1553,6 +1553,10 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
               <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
                 <span style={{fontSize:10,color:C.muted,flex:1}}>Country</span>
                 <input value={p.country||""} onChange={e=>updPlayer(editTeam,p.id,"country",e.target.value)} placeholder="e.g. England" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:130}}/>
+              </div>
+              <div style={{marginTop:8,display:"flex",alignItems:"center",gap:8}}>
+                <span style={{fontSize:10,color:C.muted,flex:1}}>Kit Number</span>
+                <input type="number" min="1" max="99" value={p.kitNumber||""} onChange={e=>updPlayer(editTeam,p.id,"kitNumber",e.target.value===''?null:Math.min(99,Math.max(1,+e.target.value)))} placeholder="—" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 8px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:60,textAlign:"center"}}/>
               </div>
             </div>
           ))}
