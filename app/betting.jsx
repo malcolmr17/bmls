@@ -966,25 +966,27 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
           ['GK','DEF','MDF','FWD'].forEach(pos=>{
             valueByPos[pos]=allPlayers.filter(p=>p.position===pos).map(p=>({...p,valuePer:rawRating(p)/p.cost})).sort((a,b)=>b.valuePer-a.valuePer).slice(0,3);
           });
-          // Greedy optimal squad within budget — reserve-aware so all 9 slots fill
+          // Pick across all positions simultaneously by value (rating/cost) so no position hogs budget
           const greedySquad=[];
           let rem=BUDGET;
-          const gPosOrder=['GK','DEF','MDF','FWD'];
-          gPosOrder.forEach((pos,pi)=>{
-            const futurePosns=gPosOrder.slice(pi+1);
-            const candidates=allPlayers.filter(p=>p.position===pos).sort((a,b)=>rawRating(b)-rawRating(a));
-            let count=0;
-            const localPicked=new Set(greedySquad.map(p=>p.id));
-            for(const p of candidates){
-              if(count>=REQUIRED[pos])break;
-              localPicked.add(p.id);
-              const slotsLeftHere=REQUIRED[pos]-count-1;
-              const minHere=candidates.filter(q=>!localPicked.has(q.id)).sort((a,b)=>a.cost-b.cost).slice(0,slotsLeftHere).reduce((s,q)=>s+q.cost,0);
-              const minFuture=futurePosns.reduce((s,fp)=>s+allPlayers.filter(q=>q.position===fp&&!localPicked.has(q.id)).sort((a,b)=>a.cost-b.cost).slice(0,REQUIRED[fp]).reduce((s2,q)=>s2+q.cost,0),0);
-              if(p.cost+minHere+minFuture<=rem){greedySquad.push(p);rem-=p.cost;count++;}
-              else{localPicked.delete(p.id);}
+          const filled={GK:0,DEF:0,MDF:0,FWD:0};
+          const pickedSet=new Set();
+          const allByValue=allPlayers.filter(p=>p.name).map(p=>({...p,val:rawRating(p)/p.cost})).sort((a,b)=>b.val-a.val);
+          for(const p of allByValue){
+            if(greedySquad.length>=9)break;
+            if(filled[p.position]>=REQUIRED[p.position])continue;
+            pickedSet.add(p.id);
+            const tempFilled={...filled,[p.position]:filled[p.position]+1};
+            let minRem=0;
+            for(const[pos,req]of Object.entries(REQUIRED)){
+              const need=req-tempFilled[pos];
+              if(need<=0)continue;
+              const cheapest=allPlayers.filter(q=>q.position===pos&&!pickedSet.has(q.id)).sort((a,b)=>a.cost-b.cost).slice(0,need);
+              minRem+=cheapest.reduce((s,q)=>s+q.cost,0);
             }
-          });
+            if(p.cost+minRem<=rem){greedySquad.push(p);rem-=p.cost;filled[p.position]++;}
+            else{pickedSet.delete(p.id);}
+          }
           const greedyCost=BUDGET-rem;
           return(
             <div>
