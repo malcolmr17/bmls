@@ -104,7 +104,7 @@ function generateMarkets(f,home,away,fixtures=[]){
   }).sort((a,b)=>b._prob-a._prob).slice(0,4).map(({_prob,...m})=>m);
 
   const pickRatingPlayer=(team,starterIds)=>{
-    const pool=(starterIds?.length?team.players.filter(p=>starterIds.includes(p.id)&&p.name):team.players.filter(p=>p.name));
+    const pool=(starterIds?.length?team.players.filter(p=>starterIds.includes(p.id)&&p.name&&p.position!=='GK'):team.players.filter(p=>p.name&&p.position!=='GK'));
     if(!pool.length)return null;
     const seed=typeof f.id==='number'?f.id:f.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
     return pool[seed%pool.length];
