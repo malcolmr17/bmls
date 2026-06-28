@@ -571,7 +571,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
   };
 
   const confirmSquad=async()=>{
-    if(!squadComplete)return;
+    if(!squadComplete||pickingRemaining<0)return;
     setSaving(true);
     await onSaveFantasy({squad:picking,history:userData.fantasyHistory||{},freeTransfers:userData.freeTransfers??1,boostsAvailable:userData.boostsAvailable||{benchBoost:true,tripleCaptain:true,wildcard:true}});
     setSaving(false);
@@ -720,7 +720,8 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
             }
           </div>
         )}
-        <Btn onClick={confirmSquad} disabled={!squadComplete||saving} variant="gold" style={{width:"100%"}}>{saving?'Saving…':'Confirm Squad'}</Btn>
+        {pickingRemaining<0&&<div style={{background:C.red+'22',border:`1px solid ${C.red}`,borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:11,color:C.red,textAlign:"center",fontWeight:700}}>Over budget by {Math.abs(pickingRemaining)} cr — remove a player</div>}
+        <Btn onClick={confirmSquad} disabled={!squadComplete||pickingRemaining<0||saving} variant="gold" style={{width:"100%"}}>{saving?'Saving…':'Confirm Squad'}</Btn>
         <button onClick={()=>setSubView('tips')} style={{width:"100%",marginTop:10,background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 0",fontSize:12,fontWeight:700,color:C.muted,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>View Tips before picking →</button>
       </div>
     );
