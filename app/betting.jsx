@@ -103,15 +103,20 @@ function generateMarkets(f,home,away,fixtures=[]){
     return{market:`scorer_${p.id}`,label:`${p.name} to Score`,group:'Anytime Goalscorer',odds:toOdds(prob),playerId:p.id,playerPosition:p.position,playerTeamId:p._team.id,_prob:prob};
   }).sort((a,b)=>b._prob-a._prob).slice(0,4).map(({_prob,...m})=>m);
 
-  const pickRatingPlayer=(team,starterIds)=>{
-    const pool=(starterIds?.length?team.players.filter(p=>starterIds.includes(p.id)&&p.name&&p.position!=='GK'):team.players.filter(p=>p.name&&p.position!=='GK'));
-    if(!pool.length)return null;
-    const seed=typeof f.id==='number'?f.id:f.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
-    return pool[seed%pool.length];
+  const seed=typeof f.id==='number'?f.id:f.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
+  const outfieldPool=(team,starterIds,pos)=>{
+    const base=starterIds?.length?team.players.filter(p=>starterIds.includes(p.id)&&p.name&&p.position!=='GK'):team.players.filter(p=>p.name&&p.position!=='GK');
+    return pos?base.filter(p=>p.position===pos):base;
   };
+  const homePool=outfieldPool(home,f.homeStarterIds);
+  const awayPool=outfieldPool(away,f.awayStarterIds);
+  const sharedPos=[...new Set(homePool.map(p=>p.position))].filter(pos=>awayPool.some(p=>p.position===pos));
+  const chosenPos=sharedPos.length?sharedPos[seed%sharedPos.length]:null;
+  const homePick=(outfieldPool(home,f.homeStarterIds,chosenPos)||homePool);
+  const awayPick=(outfieldPool(away,f.awayStarterIds,chosenPos)||awayPool);
   const ratingMarkets=[
-    {p:pickRatingPlayer(home,f.homeStarterIds),team:home},
-    {p:pickRatingPlayer(away,f.awayStarterIds),team:away},
+    {p:homePick[seed%homePick.length]||null,team:home},
+    {p:awayPick[(seed+1)%awayPick.length]||null,team:away},
   ].filter(({p})=>p).flatMap(({p,team})=>{
     const avg=playerAvgRating(p.id,p.position,team.id,fixtures)??(p.score||5);
     const pOver=avg>=8.5?0.75:avg>=7.5?0.55:avg>=6.5?0.35:0.2;
