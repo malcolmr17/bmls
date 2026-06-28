@@ -1414,7 +1414,8 @@ function BettingApp(){
         {tab==='leaderboard'&&<LeaderboardTab leagueData={leagueData} allUserRecords={allUserRecords} teams={teams} fixtures={fixtures} settings={settings} currentUsername={userData.username}/>}
         {tab==='manage'&&<ManageTab teams={teams} settings={settings} onSaveSettings={handleSaveSettings}/>}
       </div>
-      <div style={{borderTop:`1px solid ${C.border}`,padding:"12px 16px",display:"flex",justifyContent:"center",gap:24,marginTop:8}}>
+      <div style={{position:"sticky",bottom:0,background:C.card,borderTop:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",justifyContent:"center",gap:24}}>
+
         {[['BMLS','/'],['World Cup','/worldcup'],['Betting & Fantasy','/betting']].map(([label,href])=>(
           <a key={href} href={href} style={{fontSize:11,color:window.location.pathname===href?C.gold:C.muted,textDecoration:"none",fontFamily:"'DM Sans',sans-serif"}}>{label}</a>
         ))}

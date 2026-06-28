@@ -115,12 +115,15 @@ async function resizeCrest(file){
     const img=new Image();
     const url=URL.createObjectURL(file);
     img.onload=()=>{
-      const canvas=document.createElement('canvas');
-      canvas.width=300;canvas.height=300;
-      const ctx=canvas.getContext('2d');
       const min=Math.min(img.width,img.height);
+      const size=Math.min(min,600);
+      const canvas=document.createElement('canvas');
+      canvas.width=size;canvas.height=size;
+      const ctx=canvas.getContext('2d');
+      ctx.imageSmoothingEnabled=true;
+      ctx.imageSmoothingQuality='high';
       const sx=(img.width-min)/2,sy=(img.height-min)/2;
-      ctx.drawImage(img,sx,sy,min,min,0,0,300,300);
+      ctx.drawImage(img,sx,sy,min,min,0,0,size,size);
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL('image/png'));
     };
@@ -1155,7 +1158,7 @@ function SquadsTab({teams,fixtures}){
         {crestModal&&(
           <div onClick={()=>setCrestModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <button onClick={()=>setCrestModal(null)} style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",borderRadius:"50%",width:36,height:36,fontSize:20,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>×</button>
-            <img src={crestModal} onClick={e=>e.stopPropagation()} style={{maxWidth:280,maxHeight:280,borderRadius:12,objectFit:"contain"}} alt=""/>
+            <img src={crestModal} onClick={e=>e.stopPropagation()} style={{maxWidth:320,maxHeight:320,borderRadius:12,objectFit:"contain"}} alt=""/>
           </div>
         )}
         {showCrests&&(
@@ -4273,7 +4276,7 @@ function App(){
         {tab==="career"    &&<CareerTab teams={teams}/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} activeMatchWeek={activeMatchWeek} setActiveMatchWeek={setActiveMatchWeek} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
-      <div style={{borderTop:`1px solid ${C.border}`,background:C.surface,padding:"12px 16px",display:"flex",justifyContent:"center",gap:24}}>
+      <div style={{position:"sticky",bottom:0,background:C.card,borderTop:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",justifyContent:"center",gap:24}}>
         {[['⚽ BMLS','/'],['🌍 World Cup','/worldcup'],['🎰 Betting & Fantasy','/betting']].map(([label,href])=>(
           <a key={href} href={href} style={{fontSize:11,fontWeight:600,color:window.location.pathname===href?C.gold:C.muted,textDecoration:"none"}}>{label}</a>
         ))}
