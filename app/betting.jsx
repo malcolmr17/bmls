@@ -1103,7 +1103,7 @@ function LeaderboardTab({leagueData,allUserRecords,teams,fixtures,settings=DEFAU
     const bets=rec.bets||[];
     const{totalPoints}=calcFantasyPoints(rec.fantasySquad||rec.fantasyPlayerIds||[],rec.fantasyHistory||{},teams,fixtures,settings);
     return{username:u,balance:rec.balance,fantasyPoints:totalPoints,betsWon:bets.filter(b=>b.status==='won').length,betsTotal:bets.filter(b=>b.status!=='open').length};
-  }).sort((a,b)=>b.fantasyPoints-a.fantasyPoints||b.balance-a.balance);
+  }).sort((a,b)=>b.fantasyPoints-a.fantasyPoints);
 
   return(
     <div>
