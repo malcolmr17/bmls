@@ -448,50 +448,78 @@ function BettingTab({teams,fixtures,userData,onPlaceBet}){
                     </div>
                     {groups.map(grp=>{
                       const grpMarkets=markets.filter(m=>m.group===grp);
+                      if(!grpMarkets.length)return null;
+                      const renderBetBtn=(m)=>{
+                        const key=`${f.id}_${m.market}`;
+                        const sel=selectedMarket[key];
+                        const stake=parseFloat(stakes[key])||0;
+                        return(
+                          <div key={m.market} style={{flex:"1 1 140px"}}>
+                            <button onClick={()=>setSelectedMarket(prev=>({...prev,[key]:prev[key]?null:m}))} style={{width:"100%",background:sel?C.gold+'22':C.surface,border:`1px solid ${sel?C.gold:C.border}`,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
+                              <div style={{fontSize:11,color:sel?C.gold:C.muted,fontWeight:600}}>{m.label}</div>
+                              <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:sel?C.gold:C.text,marginTop:2}}>{m.odds}</div>
+                            </button>
+                            {sel&&(
+                              <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center"}}>
+                                <div style={{position:"relative",flex:1}}>
+                                  <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:13}}>$</span>
+                                  <input type="number" min="1" max={userData.balance} step="1" value={stakes[key]||''} onChange={e=>setStakes(prev=>({...prev,[key]:e.target.value}))} placeholder="Stake" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 8px 6px 22px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                                </div>
+                                <button onClick={()=>{if(stake<1||stake>userData.balance)return;onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:m.market,label:m.label,odds:m.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:m.playerId||null,playerPosition:m.playerPosition||null,playerTeamId:m.playerTeamId||null});setSelectedMarket(prev=>({...prev,[key]:null}));setStakes(prev=>({...prev,[key]:''}));}} disabled={stake<1||stake>userData.balance} style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}>{stake>=1?`Return $${(stake*m.odds).toFixed(2)}`:'Bet'}</button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      };
                       return(
                         <div key={grp} style={{padding:"12px 16px",borderTop:`1px solid ${C.border}`}}>
                           <div style={{fontSize:9,fontWeight:700,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginBottom:8}}>{grp}</div>
-                          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                            {grpMarkets.map(m=>{
-                              const key=`${f.id}_${m.market}`;
-                              const sel=selectedMarket[key];
-                              const stake=parseFloat(stakes[key])||0;
-                              return(
-                                <div key={m.market} style={{flex:"1 1 140px"}}>
-                                  <button onClick={()=>setSelectedMarket(prev=>({...prev,[key]:prev[key]?null:m}))} style={{width:"100%",background:sel?C.gold+'22':C.surface,border:`1px solid ${sel?C.gold:C.border}`,borderRadius:8,padding:"8px 10px",cursor:"pointer",textAlign:"left"}}>
-                                    <div style={{fontSize:11,color:sel?C.gold:C.muted,fontWeight:600}}>{m.label}</div>
-                                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:22,color:sel?C.gold:C.text,marginTop:2}}>{m.odds}</div>
-                                  </button>
-                                  {sel&&(
-                                    <div style={{marginTop:6,display:"flex",gap:6,alignItems:"center"}}>
-                                      <div style={{position:"relative",flex:1}}>
-                                        <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:13}}>$</span>
-                                        <input
-                                          type="number" min="1" max={userData.balance} step="1"
-                                          value={stakes[key]||''}
-                                          onChange={e=>setStakes(prev=>({...prev,[key]:e.target.value}))}
-                                          placeholder="Stake"
-                                          style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 8px 6px 22px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"}}
-                                        />
-                                      </div>
-                                      <button
-                                        onClick={()=>{
-                                          if(stake<1||stake>userData.balance)return;
-                                          onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:m.market,label:m.label,odds:m.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:m.playerId||null,playerPosition:m.playerPosition||null,playerTeamId:m.playerTeamId||null});
-                                          setSelectedMarket(prev=>({...prev,[key]:null}));
-                                          setStakes(prev=>({...prev,[key]:''}));
-                                        }}
-                                        disabled={stake<1||stake>userData.balance}
-                                        style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}
-                                      >
-                                        {stake>=1?`Return $${(stake*m.odds).toFixed(2)}`:'Bet'}
-                                      </button>
+                          {grp==='Player Rating'?(
+                            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                              {[...new Set(grpMarkets.map(m=>m.playerId))].map(pid=>{
+                                const over=grpMarkets.find(m=>m.market===`rating_over_${pid}`);
+                                const under=grpMarkets.find(m=>m.market===`rating_under_${pid}`);
+                                const overKey=`${f.id}_rating_over_${pid}`;
+                                const underKey=`${f.id}_rating_under_${pid}`;
+                                const selOver=selectedMarket[overKey];
+                                const selUnder=selectedMarket[underKey];
+                                const selM=selOver||selUnder;
+                                const selKey=selOver?overKey:underKey;
+                                const stake=parseFloat(stakes[selKey])||0;
+                                return(
+                                  <div key={pid} style={{background:C.surface,borderRadius:8,padding:"10px 12px"}}>
+                                    <div style={{fontSize:11,fontWeight:700,color:C.text,marginBottom:8}}>{over?.label?.replace(' Rating 7.5+','')}</div>
+                                    <div style={{display:"flex",gap:6,marginBottom:selM?8:0}}>
+                                      {[over,under].filter(Boolean).map(m=>{
+                                        const key=`${f.id}_${m.market}`;
+                                        const isSel=!!selectedMarket[key];
+                                        const label=m.market.startsWith('rating_over_')?'Over 7.5':'Under 7.5';
+                                        return(
+                                          <button key={m.market} onClick={()=>{const otherKey=m.market.startsWith('rating_over_')?`${f.id}_rating_under_${pid}`:`${f.id}_rating_over_${pid}`;setSelectedMarket(prev=>({...prev,[otherKey]:null,[key]:prev[key]?null:m}));}} style={{flex:1,background:isSel?C.gold+'22':C.card,border:`1px solid ${isSel?C.gold:C.border}`,borderRadius:6,padding:"8px 0",cursor:"pointer",textAlign:"center"}}>
+                                            <div style={{fontSize:10,color:isSel?C.gold:C.muted,fontWeight:600}}>{label}</div>
+                                            <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:20,color:isSel?C.gold:C.text}}>{m.odds}</div>
+                                          </button>
+                                        );
+                                      })}
                                     </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                                    {selM&&(
+                                      <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                                        <div style={{position:"relative",flex:1}}>
+                                          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:13}}>$</span>
+                                          <input type="number" min="1" max={userData.balance} step="1" value={stakes[selKey]||''} onChange={e=>setStakes(prev=>({...prev,[selKey]:e.target.value}))} placeholder="Stake" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 8px 6px 22px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
+                                        </div>
+                                        <button onClick={()=>{if(stake<1||stake>userData.balance)return;onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:selM.market,label:selM.label,odds:selM.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:selM.playerId||null,playerPosition:selM.playerPosition||null,playerTeamId:selM.playerTeamId||null});setSelectedMarket(prev=>({...prev,[selKey]:null}));setStakes(prev=>({...prev,[selKey]:''}));}} disabled={stake<1||stake>userData.balance} style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}>{stake>=1?`Return $${(stake*selM.odds).toFixed(2)}`:'Bet'}</button>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ):(
+                            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                              {grpMarkets.map(m=>renderBetBtn(m))}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
