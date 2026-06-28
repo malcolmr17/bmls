@@ -91,27 +91,29 @@ function generateMarkets(f,home,away,fixtures=[]){
   const pBtts=(1-Math.exp(-o.hxg))*(1-Math.exp(-o.axg));
 
   const posBase=pos=>pos==='FWD'?0.35:pos==='MDF'?0.15:0.05;
-  const buildScorerMarkets=(team,xg)=>{
-    const xgFactor=(xg||1.5)/2.0;
-    return team.players.filter(p=>p.name&&p.position!=='GK')
-      .map(p=>{
-        const rate=playerGoalRate(p.id,team.id,fixtures);
-        const prob=rate!==null?Math.min(0.9,rate):posBase(p.position)*xgFactor;
-        return{market:`scorer_${p.id}`,label:`${p.name} to Score`,group:'Anytime Goalscorer',odds:toOdds(prob),playerId:p.id,playerPosition:p.position,playerTeamId:team.id,_prob:prob};
-      }).sort((a,b)=>b._prob-a._prob).slice(0,3).map(({_prob,...m})=>m);
-  };
+  const allOutfield=[
+    ...home.players.filter(p=>p.name&&p.position!=='GK').map(p=>({...p,_team:home,_xg:o.hxg})),
+    ...away.players.filter(p=>p.name&&p.position!=='GK').map(p=>({...p,_team:away,_xg:o.axg})),
+  ];
+  const scorerMarkets=allOutfield.map(p=>{
+    const xgFactor=(p._xg||1.5)/2.0;
+    const rate=playerGoalRate(p.id,p._team.id,fixtures);
+    const prob=rate!==null?Math.min(0.9,rate):posBase(p.position)*xgFactor;
+    return{market:`scorer_${p.id}`,label:`${p.name} to Score`,group:'Anytime Goalscorer',odds:toOdds(prob),playerId:p.id,playerPosition:p.position,playerTeamId:p._team.id,_prob:prob};
+  }).sort((a,b)=>b._prob-a._prob).slice(0,4).map(({_prob,...m})=>m);
 
-  const buildRatingMarkets=(team)=>{
-    return team.players.filter(p=>p.name)
-      .map(p=>{
-        const avg=playerAvgRating(p.id,p.position,team.id,fixtures)??(p.score||5);
-        const pOver=avg>=8.5?0.75:avg>=7.5?0.55:avg>=6.5?0.35:0.2;
-        return{p,avg,pOver,teamId:team.id};
-      }).sort((a,b)=>b.avg-a.avg).slice(0,2).flatMap(({p,pOver,teamId})=>[
-        {market:`rating_over_${p.id}`,label:`${p.name} Rating 7.5+`,group:'Player Rating',odds:toOdds(pOver),playerId:p.id,playerPosition:p.position,playerTeamId:teamId},
-        {market:`rating_under_${p.id}`,label:`${p.name} Under 7.5`,group:'Player Rating',odds:toOdds(1-pOver),playerId:p.id,playerPosition:p.position,playerTeamId:teamId},
-      ]);
-  };
+  const allPlayers=[
+    ...home.players.filter(p=>p.name).map(p=>({...p,_team:home})),
+    ...away.players.filter(p=>p.name).map(p=>({...p,_team:away})),
+  ];
+  const ratingMarkets=allPlayers.map(p=>{
+    const avg=playerAvgRating(p.id,p.position,p._team.id,fixtures)??(p.score||5);
+    const pOver=avg>=8.5?0.75:avg>=7.5?0.55:avg>=6.5?0.35:0.2;
+    return{p,avg,pOver};
+  }).sort((a,b)=>b.avg-a.avg).slice(0,3).flatMap(({p,pOver})=>[
+    {market:`rating_over_${p.id}`,label:`${p.name} Rating 7.5+`,group:'Player Rating',odds:toOdds(pOver),playerId:p.id,playerPosition:p.position,playerTeamId:p._team.id},
+    {market:`rating_under_${p.id}`,label:`${p.name} Under 7.5`,group:'Player Rating',odds:toOdds(1-pOver),playerId:p.id,playerPosition:p.position,playerTeamId:p._team.id},
+  ]);
 
   return[
     {market:'home_win',label:'Home Win',group:'Match Result',odds:o.home},
@@ -125,10 +127,8 @@ function generateMarkets(f,home,away,fixtures=[]){
     {market:'btts_no',label:'Clean Sheet Either Side',group:'BTTS',odds:toOdds(1-pBtts)},
     {market:'home_win_2plus',label:`${home.name} Win by 2+`,group:'Margin',odds:toOdds(o.pHome/100*0.45)},
     {market:'away_win_2plus',label:`${away.name} Win by 2+`,group:'Margin',odds:toOdds(o.pAway/100*0.45)},
-    ...buildScorerMarkets(home,o.hxg),
-    ...buildScorerMarkets(away,o.axg),
-    ...buildRatingMarkets(home),
-    ...buildRatingMarkets(away),
+    ...scorerMarkets,
+    ...ratingMarkets,
   ];
 }
 
