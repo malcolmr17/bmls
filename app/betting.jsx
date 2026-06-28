@@ -119,7 +119,7 @@ function generateMarkets(f,home,away,fixtures=[]){
     {p:awayPick[(seed+1)%awayPick.length]||null,team:away},
   ].filter(({p})=>p).flatMap(({p,team})=>{
     const avg=playerAvgRating(p.id,p.position,team.id,fixtures)??(p.score||5);
-    const pOver=avg>=8.5?0.75:avg>=7.5?0.55:avg>=6.5?0.35:0.2;
+    const pOver=1/(1+Math.exp(-(avg-7.5)*1.5));
     return[
       {market:`rating_over_${p.id}`,label:`${p.name} Rating 7.5+`,group:'Player Rating',odds:toOdds(pOver),playerId:p.id,playerPosition:p.position,playerTeamId:team.id},
       {market:`rating_under_${p.id}`,label:`${p.name} Under 7.5`,group:'Player Rating',odds:toOdds(1-pOver),playerId:p.id,playerPosition:p.position,playerTeamId:team.id},
