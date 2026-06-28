@@ -122,7 +122,7 @@ async function resizeCrest(file){
       const sx=(img.width-min)/2,sy=(img.height-min)/2;
       ctx.drawImage(img,sx,sy,min,min,0,0,100,100);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg',0.75));
+      resolve(canvas.toDataURL('image/png'));
     };
     img.src=url;
   });
