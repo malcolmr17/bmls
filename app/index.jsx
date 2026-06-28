@@ -4276,7 +4276,7 @@ function App(){
         {tab==="career"    &&<CareerTab teams={teams}/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} activeMatchWeek={activeMatchWeek} setActiveMatchWeek={setActiveMatchWeek} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
-      <div style={{position:"sticky",bottom:0,background:C.card,borderTop:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",justifyContent:"center",gap:24}}>
+      <div style={{borderTop:`1px solid ${C.border}`,padding:"10px 16px",display:"flex",justifyContent:"center",gap:24,marginTop:8}}>
         {[['⚽ BMLS','/'],['🌍 World Cup','/worldcup'],['🎰 Betting & Fantasy','/betting']].map(([label,href])=>(
           <a key={href} href={href} style={{fontSize:11,fontWeight:600,color:window.location.pathname===href?C.gold:C.muted,textDecoration:"none"}}>{label}</a>
         ))}

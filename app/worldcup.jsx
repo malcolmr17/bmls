@@ -1770,7 +1770,7 @@ function WCApp(){
         {tab==='manage'&&<ManageTab nations={nations} setNations={setNations} teams={teams} wcMeta={wcMeta} setWcMeta={setWcMeta} groupMatches={groupMatches} setGroupMatches={setGroupMatches} onToast={showToast}/>}
         {toast&&<div style={{position:'fixed',bottom:20,left:'50%',transform:'translateX(-50%)',background:C.card,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 18px',fontSize:13,color:C.text,zIndex:50,whiteSpace:'nowrap'}}>{toast}</div>}
       </div>
-      <div style={{position:'sticky',bottom:0,background:C.card,borderTop:`1px solid ${C.border}`,padding:'10px 16px',display:'flex',justifyContent:'center',gap:24}}>
+      <div style={{borderTop:`1px solid ${C.border}`,padding:'10px 16px',display:'flex',justifyContent:'center',gap:24,marginTop:8}}>
         {[['BMLS','/'],['World Cup','/worldcup'],['Betting & Fantasy','/betting']].map(([label,href])=>(
           <a key={href} href={href} style={{fontSize:11,color:href==='/worldcup'?C.gold:C.muted,textDecoration:'none'}}>{label}</a>
         ))}
