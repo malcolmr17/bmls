@@ -103,7 +103,9 @@ function generateMarkets(f,home,away,fixtures=[]){
     return{market:`scorer_${p.id}`,label:`${p.name} to Score`,group:'Anytime Goalscorer',odds:toOdds(prob),playerId:p.id,playerPosition:p.position,playerTeamId:p._team.id,_prob:prob};
   }).sort((a,b)=>b._prob-a._prob).slice(0,4).map(({_prob,...m})=>m);
 
+  const THRESHOLDS=[6.5,7.0,7.5,8.0,8.5];
   const seed=typeof f.id==='number'?f.id:f.id.split('').reduce((s,c)=>s+c.charCodeAt(0),0);
+  const mw=f.matchWeek||0;
   const projectedStarters=(team,starterIds)=>{
     if(starterIds?.length)return team.players.filter(p=>starterIds.includes(p.id)&&p.name&&p.position!=='GK');
     return [...team.players].filter(p=>p.name&&p.position!=='GK').sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,5);
@@ -112,22 +114,25 @@ function generateMarkets(f,home,away,fixtures=[]){
     const base=projectedStarters(team,starterIds);
     return pos?base.filter(p=>p.position===pos):base;
   };
+  const varSeed=seed+mw*13;
   const homePool=outfieldPool(home,f.homeStarterIds);
   const awayPool=outfieldPool(away,f.awayStarterIds);
   const sharedPos=[...new Set(homePool.map(p=>p.position))].filter(pos=>awayPool.some(p=>p.position===pos));
-  const chosenPos=sharedPos.length?sharedPos[seed%sharedPos.length]:null;
+  const chosenPos=sharedPos.length?sharedPos[varSeed%sharedPos.length]:null;
   const homePick=outfieldPool(home,f.homeStarterIds,chosenPos);
   const awayPick=outfieldPool(away,f.awayStarterIds,chosenPos);
+  const homeThreshold=THRESHOLDS[varSeed%THRESHOLDS.length];
+  const awayThreshold=THRESHOLDS[(varSeed+2)%THRESHOLDS.length];
   const ratingMarkets=[
-    {p:homePick[seed%homePick.length]||null,team:home,winPct:o.pHome},
-    {p:awayPick[(seed+1)%awayPick.length]||null,team:away,winPct:o.pAway},
-  ].filter(({p})=>p).flatMap(({p,team,winPct})=>{
+    {p:homePick[varSeed%homePick.length]||null,team:home,winPct:o.pHome,threshold:homeThreshold},
+    {p:awayPick[(varSeed+1)%awayPick.length]||null,team:away,winPct:o.pAway,threshold:awayThreshold},
+  ].filter(({p})=>p).flatMap(({p,team,winPct,threshold})=>{
     const avg=playerAvgRating(p.id,p.position,team.id,fixtures)??(p.score||5);
-    const centre=7.5-(winPct-50)*0.025;
+    const centre=threshold-(winPct-50)*0.025;
     const pOver=1/(1+Math.exp(-(avg-centre)*1.5));
     return[
-      {market:`rating_over_${p.id}`,label:`${p.name} Rating 7.5+`,group:'Player Rating',odds:toOdds(pOver),playerId:p.id,playerPosition:p.position,playerTeamId:team.id},
-      {market:`rating_under_${p.id}`,label:`${p.name} Under 7.5`,group:'Player Rating',odds:toOdds(1-pOver),playerId:p.id,playerPosition:p.position,playerTeamId:team.id},
+      {market:`rating_over_${p.id}`,label:`${p.name} Rating ${threshold}+`,group:'Player Rating',odds:toOdds(pOver),playerId:p.id,playerPosition:p.position,playerTeamId:team.id,ratingThreshold:threshold},
+      {market:`rating_under_${p.id}`,label:`${p.name} Under ${threshold}`,group:'Player Rating',odds:toOdds(1-pOver),playerId:p.id,playerPosition:p.position,playerTeamId:team.id,ratingThreshold:threshold},
     ];
   });
 
@@ -161,7 +166,8 @@ function checkBetResult(bet,fixture){
     const isHome=fixture.homeId===bet.playerTeamId;
     const result=isHome?(h>a?'win':h<a?'loss':'draw'):(a>h?'win':a<h?'loss':'draw');
     const rating=calcMatchRating(ps,bet.playerPosition,result);
-    return bet.market.startsWith('rating_over_')?rating>=7.5:rating<7.5;
+    const threshold=bet.ratingThreshold??7.5;
+    return bet.market.startsWith('rating_over_')?rating>=threshold:rating<threshold;
   }
   switch(bet.market){
     case 'home_win':return h>a;
@@ -475,7 +481,7 @@ function BettingTab({teams,fixtures,userData,onPlaceBet}){
                                   <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:13}}>$</span>
                                   <input type="number" min="1" max={userData.balance} step="1" value={stakes[key]||''} onChange={e=>setStakes(prev=>({...prev,[key]:e.target.value}))} placeholder="Stake" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 8px 6px 22px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
                                 </div>
-                                <button onClick={()=>{if(stake<1||stake>userData.balance)return;onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:m.market,label:m.label,odds:m.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:m.playerId||null,playerPosition:m.playerPosition||null,playerTeamId:m.playerTeamId||null});setSelectedMarket(prev=>({...prev,[key]:null}));setStakes(prev=>({...prev,[key]:''}));}} disabled={stake<1||stake>userData.balance} style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}>{stake>=1?`Return $${(stake*m.odds).toFixed(2)}`:'Bet'}</button>
+                                <button onClick={()=>{if(stake<1||stake>userData.balance)return;onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:m.market,label:m.label,odds:m.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:m.playerId||null,playerPosition:m.playerPosition||null,playerTeamId:m.playerTeamId||null,ratingThreshold:m.ratingThreshold||null});setSelectedMarket(prev=>({...prev,[key]:null}));setStakes(prev=>({...prev,[key]:''}));}} disabled={stake<1||stake>userData.balance} style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}>{stake>=1?`Return $${(stake*m.odds).toFixed(2)}`:'Bet'}</button>
                               </div>
                             )}
                           </div>
@@ -518,7 +524,7 @@ function BettingTab({teams,fixtures,userData,onPlaceBet}){
                                           <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:13}}>$</span>
                                           <input type="number" min="1" max={userData.balance} step="1" value={stakes[selKey]||''} onChange={e=>setStakes(prev=>({...prev,[selKey]:e.target.value}))} placeholder="Stake" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 8px 6px 22px",color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",outline:"none",width:"100%",boxSizing:"border-box"}}/>
                                         </div>
-                                        <button onClick={()=>{if(stake<1||stake>userData.balance)return;onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:selM.market,label:selM.label,odds:selM.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:selM.playerId||null,playerPosition:selM.playerPosition||null,playerTeamId:selM.playerTeamId||null});setSelectedMarket(prev=>({...prev,[selKey]:null}));setStakes(prev=>({...prev,[selKey]:''}));}} disabled={stake<1||stake>userData.balance} style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}>{stake>=1?`Return $${(stake*selM.odds).toFixed(2)}`:'Bet'}</button>
+                                        <button onClick={()=>{if(stake<1||stake>userData.balance)return;onPlaceBet({id:Date.now()+Math.random(),fixtureId:f.id,homeTeamName:h.name,awayTeamName:a.name,market:selM.market,label:selM.label,odds:selM.odds,stake,status:'open',payout:null,placedAt:new Date().toISOString(),matchWeek:f.matchWeek||null,playerId:selM.playerId||null,playerPosition:selM.playerPosition||null,playerTeamId:selM.playerTeamId||null,ratingThreshold:selM.ratingThreshold||null});setSelectedMarket(prev=>({...prev,[selKey]:null}));setStakes(prev=>({...prev,[selKey]:''}));}} disabled={stake<1||stake>userData.balance} style={{background:C.green,color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",fontSize:11,fontWeight:700,cursor:stake<1||stake>userData.balance?'not-allowed':'pointer',opacity:stake<1||stake>userData.balance?0.5:1,whiteSpace:"nowrap"}}>{stake>=1?`Return $${(stake*selM.odds).toFixed(2)}`:'Bet'}</button>
                                       </div>
                                     )}
                                   </div>
