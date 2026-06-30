@@ -852,7 +852,7 @@ function FixturesTab({teams,fixtures,onPlayerClick,activeMatchWeek,onApplySim}){
                           {nationCrests[p.country]?<img src={nationCrests[p.country]} style={{width:22,height:15,borderRadius:2,objectFit:"cover",flexShrink:0}} alt=""/>:p.country?<span style={{fontSize:11}}>{flagEmoji(p.country)}</span>:null}
                         </div>
                         <span style={{fontSize:9,color:"#fff",fontWeight:700,textAlign:"center",lineHeight:1.2,textShadow:"0 1px 3px rgba(0,0,0,0.9)",maxWidth:76,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.name||"?").trim().split(/\s+/).pop()||"?"}</span>
-                        {icons.length>0&&<div style={{position:"absolute",top:18,left:2,display:"flex",zIndex:4,pointerEvents:"none"}}>{icons.map((ic,i)=><span key={i} style={{fontSize:13,lineHeight:1,marginLeft:i>0?-4:0}}>{ic}</span>)}</div>}
+                        {icons.length>0&&<div style={{position:"absolute",top:26,left:2,display:"flex",zIndex:4,pointerEvents:"none"}}>{icons.map((ic,i)=><span key={i} style={{fontSize:13,lineHeight:1,marginLeft:i>0?-4:0}}>{ic}</span>)}</div>}
                       </div>
                     );
                   };
@@ -868,7 +868,7 @@ function FixturesTab({teams,fixtures,onPlayerClick,activeMatchWeek,onApplySim}){
                           <span style={{fontSize:r!=null?9:7,fontWeight:900,color:"#fff"}}>{r!=null?r:p.position}</span>
                         </div>
                         <span style={{fontSize:7,color:"rgba(255,255,255,0.6)",textAlign:"center",fontWeight:600,lineHeight:1.2,maxWidth:50,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.name||"?").trim().split(/\s+/).pop()}</span>
-                        {icons.length>0&&<div style={{position:"absolute",top:14,left:0,display:"flex",zIndex:4,pointerEvents:"none"}}>{icons.map((ic,i)=><span key={i} style={{fontSize:11,lineHeight:1,marginLeft:i>0?-3:0}}>{ic}</span>)}</div>}
+                        {icons.length>0&&<div style={{position:"absolute",top:20,left:0,display:"flex",zIndex:4,pointerEvents:"none"}}>{icons.map((ic,i)=><span key={i} style={{fontSize:11,lineHeight:1,marginLeft:i>0?-3:0}}>{ic}</span>)}</div>}
                       </div>
                     );
                   };
