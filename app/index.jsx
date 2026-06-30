@@ -839,7 +839,7 @@ function FixturesTab({teams,fixtures,onPlayerClick,activeMatchWeek,onApplySim}){
                     const isCap=(p.roles||[]).includes('captain');
                     const stat=ps.find(s=>s.playerId===p.id);
                     const goals=stat?.goals||0,assists=stat?.assists||0,yellows=stat?.yellowCards||0,red=stat?.redCard||false;
-                    const icons=[...Array(goals).fill('⚽'),...Array(assists).fill('🦶'),...Array(yellows).fill('🟨'),...(red?['🟥']:[])];
+                    const icons=[...Array(goals).fill('⚽'),...Array(assists).fill('👟'),...Array(yellows).fill('🟨'),...(red?['🟥']:[])];
                     return(
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,width:76}}>
                         <div style={{display:"flex",alignItems:"center",gap:5}}>
@@ -861,7 +861,7 @@ function FixturesTab({teams,fixtures,onPlayerClick,activeMatchWeek,onApplySim}){
                     const bg=r!=null?ratingColor(r)+'99':'#6b728099';
                     const stat=ps.find(s=>s.playerId===p.id);
                     const goals=stat?.goals||0,assists=stat?.assists||0,yellows=stat?.yellowCards||0,red=stat?.redCard||false;
-                    const icons=[...Array(goals).fill('⚽'),...Array(assists).fill('🦶'),...Array(yellows).fill('🟨'),...(red?['🟥']:[])];
+                    const icons=[...Array(goals).fill('⚽'),...Array(assists).fill('👟'),...Array(yellows).fill('🟨'),...(red?['🟥']:[])];
                     return(
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:10}}>
                         <div style={{width:28,height:28,borderRadius:"50%",background:bg,border:`1.5px solid rgba(255,255,255,0.3)`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:3}}>
