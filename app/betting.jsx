@@ -893,7 +893,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
         {!isLocked&&isStarting&&<button onClick={e=>{e.stopPropagation();setCaptain(p.id);}} style={{background:isCap?C.gold:C.surface,border:`1px solid ${isCap?C.gold:C.border}`,borderRadius:10,padding:"1px 5px",fontSize:7,fontWeight:700,color:isCap?'#000':C.muted,cursor:"pointer"}}>C</button>}
         <span style={{fontSize:8,color:C.muted}}>{p.cost}cr</span>
         {anyMWPlayed&&(()=>{const pts=playerPtsMap[p.id]??0;return<span style={{fontSize:9,fontWeight:700,color:pts<0?C.red:pts===0?C.muted:C.green}}>{pts>0?'+':''}{pts}pts</span>;})()}
-        {(()=>{const st=mwStatus(p.teamId);return st?<span style={{fontSize:7,fontWeight:700,color:st.color,textAlign:"center"}}>{st.label}</span>:null;})()}
+        {(()=>{const st=mwStatus(p.teamId);return st?<span style={{fontSize:7,fontWeight:800,color:st.label==='To Play'?'#000':C.text,background:st.label==='To Play'?C.gold:'#374151',borderRadius:6,padding:"1px 5px",letterSpacing:0.3}}>{st.label}</span>:null;})()}
         {(()=>{const n=nextOpponent(p.teamId);return n?<span style={{fontSize:7,color:C.muted,textAlign:"center",maxWidth:52,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</span>:null;})()}
       </div>
     );
