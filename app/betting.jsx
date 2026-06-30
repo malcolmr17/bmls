@@ -270,7 +270,7 @@ function calcFantasyPoints(fantasySquad,fantasyHistory,teams,fixtures,settings=D
       const captainMult=pid===captain?(boostUsed==='tripleCaptain'?3:2):1;
       const finalScore=score*captainMult;
       mwPts+=finalScore;
-      details.push({playerName:player.name,pts:finalScore,isCaptain:pid===captain,captainMult,topRated:top5.has(pid)});
+      details.push({playerId:pid,playerName:player.name,pts:finalScore,isCaptain:pid===captain,captainMult,topRated:top5.has(pid)});
     });
     mwPts-=deduction;
     totalPoints+=mwPts;
@@ -749,6 +749,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
   };
 
   const{totalPoints,breakdown}=useMemo(()=>calcFantasyPoints(squad,userData.fantasyHistory||{},teams,fixtures,settings),[squad,userData.fantasyHistory,teams,fixtures,settings]);
+  const playerPtsMap=useMemo(()=>{const m={};breakdown.forEach(({details})=>details.forEach(({playerId,pts})=>{m[playerId]=(m[playerId]||0)+pts;}));return m;},[breakdown]);
 
   const posOrder=['GK','DEF','MDF','FWD'];
   const byPos={};
@@ -877,6 +878,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
         <span style={{fontSize:9,color:C.text,fontWeight:700,textAlign:"center",maxWidth:52,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{surname}</span>
         {!isLocked&&isStarting&&<button onClick={e=>{e.stopPropagation();setCaptain(p.id);}} style={{background:isCap?C.gold:C.surface,border:`1px solid ${isCap?C.gold:C.border}`,borderRadius:10,padding:"1px 5px",fontSize:7,fontWeight:700,color:isCap?'#000':C.muted,cursor:"pointer"}}>C</button>}
         <span style={{fontSize:8,color:C.muted}}>{p.cost}cr</span>
+        {playerPtsMap[p.id]!=null&&<span style={{fontSize:9,fontWeight:700,color:C.green}}>{playerPtsMap[p.id]>0?'+':''}{playerPtsMap[p.id]}pts</span>}
       </div>
     );
   };
