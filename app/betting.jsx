@@ -759,6 +759,11 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
     const home=f.homeId===teamId;
     return opp?`${home?'vs':'@'} ${opp.shortName||opp.name?.slice(0,3).toUpperCase()||'?'}`:null;
   },[fixtures,teams]);
+  const mwStatus=useMemo(()=>(teamId)=>{
+    const mwF=fixtures.filter(f=>(f.homeId===teamId||f.awayId===teamId)&&f.matchWeek===currentMW);
+    if(!mwF.length)return null;
+    return mwF[0].played?{label:'Played',color:C.muted}:{label:'To Play',color:C.gold};
+  },[fixtures,currentMW]);
 
   const posOrder=['GK','DEF','MDF','FWD'];
   const byPos={};
@@ -888,6 +893,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
         {!isLocked&&isStarting&&<button onClick={e=>{e.stopPropagation();setCaptain(p.id);}} style={{background:isCap?C.gold:C.surface,border:`1px solid ${isCap?C.gold:C.border}`,borderRadius:10,padding:"1px 5px",fontSize:7,fontWeight:700,color:isCap?'#000':C.muted,cursor:"pointer"}}>C</button>}
         <span style={{fontSize:8,color:C.muted}}>{p.cost}cr</span>
         {anyMWPlayed&&(()=>{const pts=playerPtsMap[p.id]??0;return<span style={{fontSize:9,fontWeight:700,color:pts<0?C.red:pts===0?C.muted:C.green}}>{pts>0?'+':''}{pts}pts</span>;})()}
+        {(()=>{const st=mwStatus(p.teamId);return st?<span style={{fontSize:7,fontWeight:700,color:st.color,textAlign:"center"}}>{st.label}</span>:null;})()}
         {(()=>{const n=nextOpponent(p.teamId);return n?<span style={{fontSize:7,color:C.muted,textAlign:"center",maxWidth:52,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n}</span>:null;})()}
       </div>
     );
@@ -991,10 +997,11 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
           {!transferOut?(
             <>
               <SLabel>Select player to transfer out</SLabel>
-              {squadPlayers.map(p=>{const nxt=nextOpponent(p.teamId);const ppts=anyMWPlayed?(playerPtsMap[p.id]??0):null;return(
+              {squadPlayers.map(p=>{const nxt=nextOpponent(p.teamId);const ppts=anyMWPlayed?(playerPtsMap[p.id]??0):null;const st=mwStatus(p.teamId);return(
                 <button key={p.id} onClick={()=>setTransferOut(p.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",marginBottom:6,cursor:"pointer",textAlign:"left"}}>
                   <span style={{background:posColor(p.position)+'33',color:posColor(p.position),borderRadius:3,padding:"2px 5px",fontSize:9,fontWeight:700}}>{p.position}</span>
                   <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>{p.name}</span>
+                  {st&&<span style={{fontSize:9,fontWeight:700,color:st.color}}>{st.label}</span>}
                   {nxt&&<span style={{fontSize:9,color:C.muted}}>{nxt}</span>}
                   {ppts!=null&&<span style={{fontSize:10,fontWeight:700,color:ppts<0?C.red:ppts===0?C.muted:C.green}}>{ppts>0?'+':''}{ppts}</span>}
                   <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:C.gold}}>{p.cost}</span>
@@ -1020,7 +1027,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
                 </div>
                 <SLabel>Select replacement ({outPlayer?.position})</SLabel>
                 {available.length===0&&<div style={{color:C.muted,fontSize:12,padding:"20px 0",textAlign:"center"}}>No eligible players within budget</div>}
-                {available.map(p=>{const nxt=nextOpponent(p.teamId);const ppts=anyMWPlayed?(playerPtsMap[p.id]??0):null;return(
+                {available.map(p=>{const nxt=nextOpponent(p.teamId);const ppts=anyMWPlayed?(playerPtsMap[p.id]??0):null;const st=mwStatus(p.teamId);return(
                   <button key={p.id} onClick={()=>{
                     setPendingTransfers(prev=>[...prev,{outId:transferOut,inId:p.id}]);
                     if(localStarting.includes(transferOut))setLocalStarting(prev=>prev.map(id=>id===transferOut?p.id:id));
@@ -1029,6 +1036,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
                   }} style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:C.surface,border:`1px solid ${C.green}44`,borderRadius:8,padding:"10px 12px",marginBottom:6,cursor:"pointer",textAlign:"left"}}>
                     <span style={{background:posColor(p.position)+'33',color:posColor(p.position),borderRadius:3,padding:"2px 5px",fontSize:9,fontWeight:700}}>{p.position}</span>
                     <span style={{flex:1,fontSize:13,fontWeight:600,color:C.text}}>{p.name}</span>
+                    {st&&<span style={{fontSize:9,fontWeight:700,color:st.color}}>{st.label}</span>}
                     {nxt&&<span style={{fontSize:9,color:C.muted}}>{nxt}</span>}
                     {ppts!=null&&<span style={{fontSize:10,fontWeight:700,color:ppts<0?C.red:ppts===0?C.muted:C.green}}>{ppts>0?'+':''}{ppts}</span>}
                     <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:16,color:C.green}}>{p.cost}</span>
