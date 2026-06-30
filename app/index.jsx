@@ -506,12 +506,16 @@ function computePlayerStats(teams,fixtures){
       goals:0,penGoals:0,assists:0,yellowCards:0,redCard:false,cleanSheets:0,ratings:[],apps:0};
   }));
   fixtures.filter(f=>f.played).forEach(f=>{
+    const hWin=f.homeScore>f.awayScore,aWin=f.awayScore>f.homeScore;
     (f.playerStats||[]).forEach(ps=>{
       if(!map[ps.playerId])return;
       const s=map[ps.playerId];
       s.apps++;s.goals+=ps.goals||0;s.penGoals+=ps.penGoals||0;s.assists+=ps.assists||0;
       s.yellowCards+=ps.yellowCards||0;if(ps.redCard)s.redCard=true;
-      if(ps.cleanSheet)s.cleanSheets++;if(ps.rating)s.ratings.push(ps.rating);
+      if(ps.cleanSheet)s.cleanSheets++;
+      const isHome=ps.teamId===f.homeId;
+      const result=(isHome?hWin:aWin)?'win':(isHome?aWin:hWin)?'loss':'draw';
+      s.ratings.push(calcMatchRating(ps,s.position,result));
     });
   });
   return Object.values(map).map(s=>({...s,avgRating:s.ratings.length>0?(s.ratings.reduce((a,b)=>a+b,0)/s.ratings.length).toFixed(1):null}));
@@ -592,7 +596,11 @@ function PlayerProfileModal({data,fixtures,onClose}){
       if(!ps)return;
       s.apps++;s.goals+=ps.goals||0;s.penGoals+=ps.penGoals||0;s.assists+=ps.assists||0;
       s.yellowCards+=ps.yellowCards||0;if(ps.redCard)s.redCard=true;
-      if(ps.cleanSheet)s.cleanSheets++;if(ps.rating)s.ratings.push(ps.rating);
+      if(ps.cleanSheet)s.cleanSheets++;
+      const isHome=ps.teamId===f.homeId;
+      const hWin=f.homeScore>f.awayScore,aWin=f.awayScore>f.homeScore;
+      const result=(isHome?hWin:aWin)?'win':(isHome?aWin:hWin)?'loss':'draw';
+      s.ratings.push(calcMatchRating(ps,player._origPos||player.position,result));
     });
     s.avgRating=s.ratings.length>0?(s.ratings.reduce((a,b)=>a+b,0)/s.ratings.length).toFixed(1):null;
     return s;
