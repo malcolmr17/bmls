@@ -988,6 +988,26 @@ function TableTab({teams,fixtures}){
 function StatsTab({teams,fixtures}){
   const[cat,setCat]=useState("goals");
   const[mode,setMode]=useState("actual");
+  const[mwPos,setMwPos]=useState("all");
+  const playedMWs=useMemo(()=>[...new Set(fixtures.filter(f=>f.played&&f.matchWeek!=null).map(f=>f.matchWeek))].sort((a,b)=>a-b),[fixtures]);
+  const[selectedMW,setSelectedMW]=useState(null);
+  const activeMW=selectedMW??playedMWs[playedMWs.length-1]??null;
+  const mwRatings=useMemo(()=>{
+    if(activeMW==null)return[];
+    const playerMap={};teams.forEach(t=>t.players.forEach(p=>{if(p.name)playerMap[p.id]={...p,teamId:t.id,teamName:t.name,teamColor:t.color};}));
+    const mwF=fixtures.filter(f=>f.played&&f.matchWeek===activeMW);
+    const rows=[];
+    mwF.forEach(f=>{
+      const hWin=f.homeScore>f.awayScore,aWin=f.awayScore>f.homeScore;
+      (f.playerStats||[]).forEach(ps=>{
+        const p=playerMap[ps.playerId];if(!p)return;
+        const isHome=p.teamId===f.homeId;
+        const result=(isHome?hWin:aWin)?'win':(isHome?aWin:hWin)?'loss':'draw';
+        rows.push({...p,rating:calcMatchRating(ps,p.position,result),goals:ps.goals||0,assists:ps.assists||0});
+      });
+    });
+    return rows.sort((a,b)=>b.rating-a.rating);
+  },[fixtures,teams,activeMW]);
   const playerCountry=useMemo(()=>{const m={};teams.forEach(t=>t.players.forEach(p=>{m[p.id]=p.country||"";}));return m;},[teams]);
   const playerStats=useMemo(()=>computePlayerStats(teams,fixtures),[teams,fixtures]);
   const playedCount=fixtures.filter(f=>f.played).length;
@@ -1049,10 +1069,43 @@ function StatsTab({teams,fixtures}){
   const getNum=(p,key)=>{if(key==="redCard")return p.redCard?1:0;if(key==="avgRating")return parseFloat(p.avgRating)||0;return p[key]||0;};
   const current=cats.find(c=>c.key===cat);
   const mv=maxVal(cat,list);
+  if(mode==="matchweek"){
+    const filtered=mwPos==="all"?mwRatings:mwRatings.filter(p=>p.position===mwPos);
+    return(
+      <div>
+        <div style={{display:"flex",gap:6,marginBottom:14}}>
+          {["actual","projected","matchweek"].map(m=><button key={m} onClick={()=>setMode(m)} style={{background:mode===m?C.accent:C.surface,color:mode===m?C.white:C.muted,border:`1px solid ${mode===m?C.accent:C.border}`,borderRadius:6,padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{m==="actual"?"Season":m==="projected"?"Projected":"Match Week"}</button>)}
+        </div>
+        {playedMWs.length===0?<Empty icon="📊" msg="No results yet." hint="Mark fixtures as played."/>:(
+          <>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+              {playedMWs.map(mw=><button key={mw} onClick={()=>setSelectedMW(mw)} style={{background:activeMW===mw?C.accent:C.surface,color:activeMW===mw?C.white:C.muted,border:`1px solid ${activeMW===mw?C.accent:C.border}`,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>MW {mw}</button>)}
+            </div>
+            <div style={{display:"flex",gap:6,marginBottom:16}}>
+              {["all","GK","DEF","MDF","FWD"].map(pos=><button key={pos} onClick={()=>setMwPos(pos)} style={{background:mwPos===pos?C.card:C.surface,color:mwPos===pos?C.white:C.muted,border:`1px solid ${mwPos===pos?C.accent:C.border}`,borderRadius:20,padding:"4px 12px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{pos==="all"?"All":pos}</button>)}
+            </div>
+            {filtered.length===0?<div style={{color:C.muted,fontSize:13,fontStyle:"italic",padding:"20px 0"}}>No stats recorded for MW {activeMW}{mwPos!=="all"?` · ${mwPos}`:""}</div>:filtered.map((p,i)=>(
+              <div key={p.id+i} style={{background:i===0?`${ratingColor(p.rating)}11`:C.card,border:`1px solid ${i===0?ratingColor(p.rating)+"44":C.border}`,borderRadius:10,padding:"11px 14px",marginBottom:7}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:i===0?26:17,color:i===0?ratingColor(p.rating):C.muted,minWidth:24,textAlign:"center"}}>{i+1}</span>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:p.teamColor,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:600,color:C.text}}>{p.name}</div>
+                    <div style={{fontSize:11,color:C.muted}}>{p.teamName} · {p.position}{p.goals>0?` · ${p.goals}G`:""}{p.assists>0?` · ${p.assists}A`:""}</div>
+                  </div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:i===0?30:22,color:ratingColor(p.rating),lineHeight:1}}>{p.rating}</div>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+    );
+  }
   return(
     <div>
       <div style={{display:"flex",gap:6,marginBottom:14}}>
-        {["actual","projected"].map(m=><button key={m} onClick={()=>{setMode(m);if(m==="projected"&&!projCats.includes(cat))setCat("goals");}} style={{background:mode===m?C.accent:C.surface,color:mode===m?C.white:C.muted,border:`1px solid ${mode===m?C.accent:C.border}`,borderRadius:6,padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{m==="actual"?"Season Stats":"Projected"}</button>)}
+        {["actual","projected","matchweek"].map(m=><button key={m} onClick={()=>{setMode(m);if(m==="projected"&&!projCats.includes(cat))setCat("goals");}} style={{background:mode===m?C.accent:C.surface,color:mode===m?C.white:C.muted,border:`1px solid ${mode===m?C.accent:C.border}`,borderRadius:6,padding:"5px 14px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>{m==="actual"?"Season Stats":m==="projected"?"Projected":"Match Week"}</button>)}
         {mode==="projected"&&<span style={{fontSize:11,color:C.muted,alignSelf:"center",marginLeft:4}}>End-of-season estimate · {gamesPerTeam} game season</span>}
       </div>
       <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:20}}>
