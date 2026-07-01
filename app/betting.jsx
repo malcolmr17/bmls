@@ -1285,8 +1285,8 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
           <div>
             <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:12,fontWeight:700,color:C.text}}>Free transfers: <span style={{color:C.gold}}>{freeTransfers}</span></div>
-                {pendingTransfers.length>0&&<div style={{fontSize:11,color:C.muted,marginTop:2}}>{pendingTransfers.length} pending — tap NEW to undo</div>}
+                <div style={{fontSize:12,fontWeight:700,color:C.text}}>Free transfers: <span style={{color:C.gold}}>{Math.max(0,freeTransfers-pendingTransfers.length)}</span><span style={{fontSize:10,color:C.muted,fontWeight:400}}> / {freeTransfers}</span></div>
+                {pendingTransfers.length>0&&<div style={{fontSize:11,color:pendingTransfers.length>freeTransfers?'#f97316':C.muted,marginTop:2}}>{pendingTransfers.length} pending — tap NEW to undo</div>}
               </div>
               <div style={{textAlign:"right"}}>
                 <div style={{fontSize:13,fontWeight:700,color:transferOut?C.green:C.text}}>{transferOut?budgetWithSale:xfBudgetLeft}cr</div>
