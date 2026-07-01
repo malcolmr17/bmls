@@ -2476,7 +2476,7 @@ function NewsTab({teams,fixtures,transfers,activeMatchWeek}){
 
 const KIT_COLORS=['#3B82F6','#EF4444','#22C55E','#F59E0B','#A855F7','#EC4899','#06B6D4','#F97316','#E2E8F0','#6B7280'];
 
-function CreateTab({teams}){
+function CreateTab({teams,fixtures}){
   const freshDraft=()=>({id:String(Date.now()+Math.random()),name:'',color:'#3B82F6',formation:'2-2-1',players:[]});
   const[myTeams,setMyTeams]=useState(()=>{try{return JSON.parse(localStorage.getItem('bmls_my_teams')||'[]');}catch{return[];}});
   const[draft,setDraft]=useState(freshDraft);
@@ -2484,8 +2484,50 @@ function CreateTab({teams}){
   const[slotSearch,setSlotSearch]=useState('');
   const[slotShowAll,setSlotShowAll]=useState(false);
   const[saved,setSaved]=useState(false);
+  const[totmwMode,setTotmwMode]=useState(false);
 
   const allPlayers=useMemo(()=>(teams||[]).flatMap(t=>t.players.filter(p=>p.name).map(p=>({...p,teamName:t.name||'',teamColor:t.color||C.accent,teamId:t.id}))),[teams]);
+
+  const totmwDraft=useMemo(()=>{
+    const played=(fixtures||[]).filter(f=>f.played&&f.matchWeek!=null);
+    if(!played.length)return null;
+    const lastMW=Math.max(...played.map(f=>f.matchWeek));
+    const mwF=played.filter(f=>f.matchWeek===lastMW);
+    const allP={};teams.forEach(t=>t.players.filter(p=>p.name).forEach(p=>{allP[p.id]={...p,teamId:t.id,teamName:t.name,teamColor:t.color||C.accent};}));
+    const mwRatings=[];
+    mwF.forEach(f=>{
+      const hWin=f.homeScore>f.awayScore,aWin=f.awayScore>f.homeScore;
+      (f.playerStats||[]).forEach(ps=>{
+        const pl=allP[ps.playerId];if(!pl)return;
+        const ih=f.homeId===pl.teamId;if(!ih&&f.awayId!==pl.teamId)return;
+        const res=ih?(hWin?'win':aWin?'loss':'draw'):(aWin?'win':hWin?'loss':'draw');
+        mwRatings.push({playerId:ps.playerId,player:pl,rating:calcMatchRating(ps,pl.position,res)});
+      });
+    });
+    if(!mwRatings.length)return null;
+    const byPos={GK:[],DEF:[],MDF:[],FWD:[]};
+    mwRatings.forEach(r=>{if(byPos[r.player.position])byPos[r.player.position].push(r);});
+    Object.values(byPos).forEach(arr=>arr.sort((a,b)=>b.rating-a.rating));
+    let bestScore=-1,bestFm=null,bestPicks=null;
+    FORMATIONS.forEach(fm=>{
+      const needed={GK:1,DEF:fm.def,MDF:fm.mdf,FWD:fm.fwd};
+      const picked=[];const tc={};let score=0;let ok=true;
+      for(const pos of['GK','DEF','MDF','FWD']){
+        let cnt=0;
+        for(const r of(byPos[pos]||[])){
+          if(cnt>=needed[pos])break;
+          if(picked.some(q=>q.playerId===r.playerId))continue;
+          if((tc[r.player.teamId]||0)>=2)continue;
+          picked.push(r);tc[r.player.teamId]=(tc[r.player.teamId]||0)+1;score+=r.rating;cnt++;
+        }
+        if(cnt<needed[pos]){ok=false;break;}
+      }
+      if(ok&&score>bestScore){bestScore=score;bestFm=fm;bestPicks=picked;}
+    });
+    if(!bestPicks)return null;
+    const players=bestPicks.map(r=>({pos:r.player.position,i:byPos[r.player.position].filter(q=>bestPicks.includes(q)).indexOf(r),name:r.player.name,playerId:r.playerId,teamId:r.player.teamId,teamColor:r.player.teamColor,position:r.player.position,rating:r.rating}));
+    return{formation:bestFm.id,players,mw:lastMW};
+  },[fixtures,teams]);
 
   const form=FORMATIONS.find(f=>f.id===draft.formation)||FORMATIONS[0];
   const totalSlots=1+form.def+form.mdf+form.fwd;
@@ -2530,7 +2572,32 @@ function CreateTab({teams}){
 
   return(
     <div style={{padding:16,paddingBottom:40}}>
-      <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.muted,textTransform:'uppercase',marginBottom:14}}>Build Your Team</div>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14}}>
+        <div style={{fontSize:13,fontWeight:800,letterSpacing:2,color:C.muted,textTransform:'uppercase'}}>Build Your Team</div>
+        {totmwDraft&&(
+          <button onClick={()=>{
+            if(!totmwMode){setDraft(d=>({...d,formation:totmwDraft.formation,players:totmwDraft.players}));setEditSlot(null);}
+            setTotmwMode(v=>!v);
+          }} style={{display:'flex',alignItems:'center',gap:5,background:totmwMode?`${C.gold}22`:'transparent',border:`1px solid ${totmwMode?C.gold:C.border}`,borderRadius:8,padding:'5px 10px',cursor:'pointer',fontSize:11,fontWeight:700,color:totmwMode?C.gold:C.muted,fontFamily:"'DM Sans',sans-serif"}}>
+            ⭐ {totmwMode?`TOTMW ${totmwDraft.mw}`:`Team of MW ${totmwDraft.mw}`}
+          </button>
+        )}
+      </div>
+      {totmwMode&&totmwDraft&&(
+        <div style={{background:`${C.gold}11`,border:`1px solid ${C.gold}44`,borderRadius:10,padding:'10px 14px',marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.gold,marginBottom:2}}>Team of Match Week {totmwDraft.mw}</div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            {totmwDraft.players.map(p=>(
+              <div key={p.playerId} style={{display:'flex',alignItems:'center',gap:4}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:p.teamColor,display:'inline-block',flexShrink:0}}/>
+                <span style={{fontSize:11,color:C.text,fontWeight:600}}>{p.name?.trim().split(/\s+/).pop()}</span>
+                <span style={{fontSize:9,color:C.gold,fontWeight:700}}>{p.rating?.toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:10,color:C.muted,marginTop:6}}>Formation auto-set to {totmwDraft.formation} · tap the pitch to adjust</div>
+        </div>
+      )}
 
       {/* Name + Color */}
       <div style={{background:C.card,borderRadius:10,padding:14,marginBottom:10,border:`1px solid ${C.border}`}}>
@@ -4383,7 +4450,7 @@ function App(){
         {tab==="news"      &&<NewsTab teams={teams} fixtures={fixtures} transfers={transfers} activeMatchWeek={activeMatchWeek}/>}
         {tab==="odds"      &&<OddsTab teams={teams} fixtures={fixtures} activeMatchWeek={activeMatchWeek}/>}
         {tab==="playoffs"  &&<PlayoffsTab teams={teams} fixtures={fixtures}/>}
-        {tab==="create"    &&<CreateTab teams={teams}/>}
+        {tab==="create"    &&<CreateTab teams={teams} fixtures={fixtures}/>}
         {tab==="career"    &&<CareerTab teams={teams}/>}
         {tab==="manage"    &&<ManageTab teams={teams} setTeams={setTeams} fixtures={fixtures} setFixtures={setFixtures} transfers={transfers} setTransfers={setTransfers} activeMatchWeek={activeMatchWeek} setActiveMatchWeek={setActiveMatchWeek} onExport={handleExport} onImport={handleImport} onToast={showToast}/>}
       </div>
