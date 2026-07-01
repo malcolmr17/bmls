@@ -1911,6 +1911,10 @@ function ManageTab({teams,setTeams,fixtures,setFixtures,transfers,setTransfers,a
                           <button onClick={()=>updFixStat(editFix,playerId,"redCard",!ps.redCard)} style={{width:34,height:34,borderRadius:5,border:`1px solid ${ps.redCard?C.red:C.border}`,background:ps.redCard?`${C.red}33`:"transparent",color:ps.redCard?C.red:C.muted,cursor:"pointer",fontSize:16}}>🟥</button>
                         </div>
                         <NumStepper label="Mistakes" value={ps.crucialMistakes||0} onChange={v=>updFixStat(editFix,playerId,"crucialMistakes",v)} color={C.red}/>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                          <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Injured</div>
+                          <button onClick={()=>updFixStat(editFix,playerId,"injured",!ps.injured)} style={{width:34,height:34,borderRadius:5,border:`1px solid ${ps.injured?'#f97316':C.border}`,background:ps.injured?'#f9731633':"transparent",color:ps.injured?'#f97316':C.muted,cursor:"pointer",fontSize:16}}>🚑</button>
+                        </div>
                         {player.position==="GK"&&<NumStepper label="Saves" value={ps.saves||0} onChange={v=>updFixStat(editFix,playerId,"saves",v)} color={C.purple}/>}
                         {player.position==="GK"&&<NumStepper label="Pen Saves" value={ps.penSaves||0} onChange={v=>updFixStat(editFix,playerId,"penSaves",v)} color={C.green}/>}
                         {player.position==="GK"&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
