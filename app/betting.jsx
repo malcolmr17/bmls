@@ -1184,7 +1184,7 @@ function FantasyTab({teams,fixtures,userData,settings=DEFAULT_SETTINGS,onSaveFan
               <div style={{fontSize:9,color:C.muted}}>Budget left</div>
               <div style={{fontSize:13,fontWeight:700,color:C.text}}>{BUDGET-squadBudget}</div>
             </div>
-            <div style={{fontSize:10,color:C.muted,width:"100%"}}>Free transfers: <span style={{color:C.gold,fontWeight:700}}>{freeTransfers}</span>{localStarting.length===6&&!validFormation&&<span style={{color:C.red,marginLeft:8}}>· Must use 2-2-1, 2-1-2, 3-1-1 or 2-3</span>}</div>
+            <div style={{fontSize:10,color:C.muted,width:"100%"}}>Free transfers: <span style={{color:C.gold,fontWeight:700}}>{Math.max(0,freeTransfers-pendingTransfers.length)}</span><span style={{color:C.muted}}> / {freeTransfers}</span>{pendingTransfers.length>0&&<span style={{color:pendingTransfers.length>freeTransfers?'#f97316':C.muted,marginLeft:6}}>({pendingTransfers.length} pending)</span>}{localStarting.length===6&&!validFormation&&<span style={{color:C.red,marginLeft:8}}>· Must use 2-2-1, 2-1-2, 3-1-1 or 2-3</span>}</div>
           </div>
 
           {/* Boosts */}
